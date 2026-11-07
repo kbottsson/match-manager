@@ -96,7 +96,7 @@
   /* ---------- sub sheet ---------- */
   .scrim{position:absolute;inset:0;background:rgba(16,20,24,.42)}
   .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;
-    padding:14px 18px 20px;box-shadow:0 -12px 40px rgba(0,0,0,.18)}
+    padding:14px 18px 26px;box-shadow:0 -12px 40px rgba(0,0,0,.18)}
   .grab{width:38px;height:4px;border-radius:2px;background:#d9d3c8;margin:0 auto 12px}
   .sheet h2{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:700}
   .sheet .when{font:600 11px/1 var(--num);color:var(--ink3);float:right}
@@ -175,10 +175,26 @@
   .picked{display:flex;align-items:center;gap:8px;margin-top:11px;padding:12px 13px;border-radius:11px;
     background:var(--green-soft);color:var(--green);font-weight:700;font-size:15px}
   .picked .ball{font-size:16px}
+  .picked.off{background:var(--red-soft);color:var(--red)}
   .picked .chg{margin-left:auto;font:600 10px/1 var(--num);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
   .noassist{width:100%;height:56px;margin-top:10px;border:0;border-radius:12px;background:var(--ink);
     color:#fff;font:700 14.5px/1 -apple-system,sans-serif;letter-spacing:.01em}
   .noassist span{opacity:.55;font-weight:500;margin-left:6px}
+
+  /* ---------- player sheet ---------- */
+  .phead{display:flex;align-items:center;gap:9px;margin-top:12px;padding:14px;border-radius:12px;background:#f6f3ee}
+  .phead .nm3{font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .phead .shirt{font:600 12px/1 var(--num);color:var(--ink3)}
+  .phead .meta{margin-left:auto;font:700 10px/1 var(--num);letter-spacing:.09em;color:var(--ink3)}
+  .phead .min2{font:700 20px/1 var(--num);font-variant-numeric:tabular-nums;width:52px;text-align:right}
+  .pacts{margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .pact{display:flex;align-items:center;gap:12px;height:56px;padding:0 14px;font-size:15.5px;font-weight:600;
+    border-bottom:1px solid var(--line2);background:#fff}
+  .pact:last-child{border-bottom:0}
+  .pact .i{width:26px;font-size:16px;text-align:center;color:var(--ink2)}
+  .gbtn.cur{background:var(--green-soft);border-color:#bcd8c7;color:var(--green)}
+  .gbtn.cur .sl{color:var(--green)}
+
 
 
 
@@ -247,7 +263,10 @@ const T = {
       next:'Next block',forp:'for',
       whoscored:'Who scored?',assistq:'Assist?',change:'change',
       tapassist:'Tap a teammate, or save without one',
-      noassist:'No assist — save goal',theirgoal:'Their goal'},
+      noassist:'No assist — save goal',theirgoal:'Their goal',
+      player:'Player',loggoal:'Log goal',suboff:'Substitute off',editmin:'Edit minutes',
+      whocomesoff:'Who comes off?',comingon:'coming on',changepos2:'Change position',
+      nowat:'currently',whocomeson:'Who comes on?',moveto:'Move to which slot?'},
   sv:{coach:'Tränare',view:'Vy',onfield:'På plan',bench:'Avbytare',min:'Min',
       stop:'Stopp',goal:'Mål',sub:'Byte',subst:'Byte',confirm:'Bekräfta',
       changepos:'Byt position',out:'Ut',in:'In',planned:'planerad denna period',
@@ -260,7 +279,10 @@ const T = {
       next:'Nästa block',forp:'för',
       whoscored:'Vem gjorde mål?',assistq:'Assist?',change:'ändra',
       tapassist:'Tryck på en lagkamrat, eller spara utan',
-      noassist:'Ingen assist – spara mål',theirgoal:'Motståndarmål'},
+      noassist:'Ingen assist – spara mål',theirgoal:'Motståndarmål',
+      player:'Spelare',loggoal:'Registrera mål',suboff:'Byt ut',editmin:'Justera speltid',
+      whocomesoff:'Vem går av?',comingon:'kommer in',changepos2:'Byt position',
+      nowat:'spelar nu',whocomeson:'Vem kommer in?',moveto:'Flytta till vilken plats?'},
 };
 const SLOT_ORDER = ['G','LB','RB','LM','MM','RM','F'];
 
@@ -343,32 +365,78 @@ function viewScreen(lang){
     + `<div class="pullbar"><button class="btn wide">${t.takeover}</button></div>`;
 }
 
+function playerGrid(lang, items){
+  const L = SLOT_LABEL[lang];
+  return items.map(({ slot, id, right, cur }) => `
+    <button class="gbtn${cur ? ' cur' : ''}">
+      <span class="sl">${slot ? L[slot] : ''}</span>${NAME[id].name}
+      <span class="no">${right}</span></button>`).join('');
+}
+
 function subScreen(lang){
   const t = T[lang];
-  return header(lang,'coach') + liveBody(lang) + actions(lang) + `
+  const bench = BENCH.map(([id, min]) => ({ slot: null, id, right: min.toFixed(1) }));
+  return header(lang,'coach') + liveBody(lang, VAR) + actions(lang, VAR) + `
     <div class="scrim"></div>
     <div class="sheet">
       <div class="grab"></div>
       <h2>${t.subst}<span class="when">P2 · 07:12</span></h2>
-      <div class="swap">
-        <div class="line">
-          <span class="tag off">${t.out}</span>
-          <span class="nm">Hugo<span class="no">3</span></span>
-          <span class="slot" style="width:auto">MM</span>
-          <span class="min">33.5</span>
-        </div>
-        <div class="line">
-          <span class="tag on">${t.in}</span>
-          <span class="nm">Omar<span class="no">8</span></span>
-          <span class="slot" style="width:auto">MM</span>
-          <span class="min">12.0</span>
-        </div>
-      </div>
+      <div class="picked off"><span class="ball">⇄</span>Hugo<span class="no">3</span>
+        <span class="chg">MM · 33.5</span></div>
+      <div class="q">${t.whocomeson}</div>
+      <div class="goalgrid">${playerGrid(lang, bench)}</div>
       <div class="hint"><span class="tagplan">plan</span>${t.planned}: <b>Omar</b></div>
-      <div class="btnrow">
-        <button class="btn primary">${t.confirm}</button>
-        <button class="btn ghost">${t.changepos}</button>
+    </div>`;
+}
+
+function subInScreen(lang){
+  const t = T[lang];
+  const on = ON_FIELD.map(([slot, id, min]) => ({ slot, id, right: min.toFixed(1) }));
+  return header(lang,'coach') + liveBody(lang, VAR) + actions(lang, VAR) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.subst}<span class="when">P2 · 07:12</span></h2>
+      <div class="picked"><span class="ball">⇄</span>Omar<span class="no">8</span>
+        <span class="chg">12.0 · ${t.comingon}</span></div>
+      <div class="q">${t.whocomesoff}</div>
+      <div class="goalgrid">${playerGrid(lang, on)}</div>
+    </div>`;
+}
+
+function playerScreen(lang){
+  const t = T[lang];
+  return header(lang,'coach') + liveBody(lang, VAR) + actions(lang, VAR) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.player}<span class="when">P2 · 07:12</span></h2>
+      <div class="phead"><span class="nm3">Hugo</span><span class="shirt">3</span>
+        <span class="meta">MM</span><span class="min2">33.5</span></div>
+      <div class="pacts">
+        <div class="pact"><span class="i">⚽</span>${t.loggoal}</div>
+        <div class="pact"><span class="i">⇄</span>${t.suboff}</div>
+        <div class="pact"><span class="i">↗</span>${t.changepos2}</div>
+        <div class="pact"><span class="i">✎</span>${t.editmin}</div>
       </div>
+    </div>`;
+}
+
+function positionScreen(lang){
+  const t = T[lang];
+  const items = SLOT_ORDER.map(s => {
+    const f = ON_FIELD.find(x => x[0] === s);
+    return { slot: s, id: f[1], right: '', cur: s === 'MM' };
+  });
+  return header(lang,'coach') + liveBody(lang, VAR) + actions(lang, VAR) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.changepos2}<span class="when">P2 · 07:12</span></h2>
+      <div class="phead"><span class="nm3">Hugo</span><span class="shirt">3</span>
+        <span class="meta">${t.nowat} MM</span><span class="min2">33.5</span></div>
+      <div class="q">${t.moveto}</div>
+      <div class="goalgrid">${playerGrid(lang, items)}</div>
     </div>`;
 }
 
@@ -464,16 +532,18 @@ function recapScreen(lang){
 const SCREENS = {
   live:      {n:1, label:'LIVE — COACH MODE', html:liveScreen},
   plan:      {n:2, label:'PLAN — PRE-MATCH', html:planScreen},
-  sub:       {n:3, label:'SUBSTITUTION SHEET', html:subScreen},
-  goal:      {n:4, label:'GOAL — WHO SCORED', html:goalScreen},
+  sub:       {n:3, label:'SUB — FROM A PLAYER ROW', html:subScreen},
+  subin:     {n:4, label:'SUB — FROM THE BENCH', html:subInScreen},
   assist:    {n:5, label:'GOAL — ASSIST', html:assistScreen},
-  recap:     {n:6, label:'RECAP — FULL TIME', html:recapScreen},
-  view:      {n:7, label:'READ-ONLY', html:viewScreen},
-  'live-sv': {n:8, label:'LIVE — SVENSKA', html:liveScreen},
+  player:    {n:6, label:'PLAYER SHEET', html:playerScreen},
+  position:  {n:7, label:'CHANGE POSITION', html:positionScreen},
+  recap:     {n:8, label:'RECAP — FULL TIME', html:recapScreen},
+  view:      {n:9, label:'READ-ONLY', html:viewScreen},
+  'live-sv': {n:10, label:'LIVE — SVENSKA', html:liveScreen},
 };
 
 const params = new URLSearchParams(location.search);
-const VAR = params.get('v') || 'none';
+const VAR = params.get('v') || 'inline';
 const key = params.get('s') || 'live';
 const lang = params.get('lang') || (key === 'live-sv' ? 'sv' : 'en');
 const spec = SCREENS[key] || SCREENS.live;

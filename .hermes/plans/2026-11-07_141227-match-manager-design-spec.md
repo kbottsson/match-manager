@@ -1,8 +1,8 @@
 # Match Manager — Design Specification (v2, decisions locked)
 
-**Status:** decisions D1–D11 settled. Ready for the build plan.
+**Status:** decisions D1–D12 settled. Ready for the build plan.
 **Date:** 2026-11-07
-**Revision:** v2.4 — **D5 locked: Cloudflare Workers + D1.** All decisions closed. Plan blocks 7 min (7/7/6, two subs per period); playing time = total minutes incl. goal (D4); D8/D9 confirmed.
+**Revision:** v2.5 — **D12: controls live on the player's row.** ⚽ and ⇄ on every row (goal now 2 taps, sub 2 taps), bottom bar reduced to clock / their goal / undo, position change and minute edits behind the player's name. Cloudflare locked (D5); total minutes incl. goal (D4); 7/7/6 plan blocks.
 **Author:** Hermes (for D, volunteer coach)
 **Working dir:** `~/Projects/match-manager/`
 
@@ -23,6 +23,7 @@
 | D9 | Fairness rule | **Deferred.** v1 reports the numbers (including the forecast); automated tolerance flags, red "cannot catch up" warnings and ranked sub recommendations come later. |
 | D10 | Score | Both teams: our goal (scorer + optional assist), their goal (score only) |
 | D11 | Clock | Manual START/STOP, referee-aligned, counts up, never auto-stops. Drift correction tucked behind the clock display, not a visible button. |
+| D12 | Where controls live | **On the player's row.** ⚽ and ⇄ sit on every row; the bottom bar holds only clock, their goal and undo. Position changes and minute edits live behind the player's name. |
 
 **Deferred by D9, explicitly out of v1:** tolerance thresholds, red/amber fairness flags, "this player can no longer reach the target" warnings, ranked substitution suggestions, fairness badges in history. The data those need is still captured, so adding them later is a UI layer, not a schema change.
 
@@ -226,10 +227,11 @@ Workflow 1 is a five-minute job the night before, and it is what makes workflow 
 ### 5.2 Workflow 2 — in-match, period by period
 
 - **Clock** START/STOP per §4.5. Periods 2 and 3 begin from the END PERIOD chip.
-- **SUB** → off/on pairs. Bench sorted by fewest minutes, keeper included like anyone else.
-- **MOVE** → a position change with nobody leaving the field (swap LM and RM, or push a back forward). Two taps: tap player → tap new slot.
-- **GOAL** → scorer (grid of the on-field seven, big buttons) → optional assist. **GOAL AGAINST** records their score only.
-- **Undo** for 6 s after every action, plus a permanent undo in the header.
+- **GOAL** → tap ⚽ on the scorer's row, then the assist prompt. Two taps, no picker.
+- **SUB** → tap ⇄ on any row. From an on-field row the sheet opens with that player going off; from a bench row it opens with him coming on. Two taps.
+- **POSITION** → tap the player's name → *change position* → tap the target slot; the app swaps with whoever is there. Three taps, and nobody leaves the field.
+- **THEIR GOAL** in the bottom bar records the opponent's score; it belongs to no player, so it is one of the few match-level controls left.
+- **Undo** for 6 s after every action, plus a permanent undo in the bar.
 - Every event carries its period, so all stats are naturally period-by-period.
 
 ### 5.3 Post-match
@@ -285,68 +287,72 @@ Six screens.
 - Codes are localised (`LB` / `VB`).
 - The forecast updates on every cell change. Spread as a plain number plus the Σ check make it self-auditing with no rules engine (D9).
 
-### 6.2 Live
+### 6.2 Live — every action anchored to a player
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ ● COACH    ● 07:12 / 20:00      UPPÅKRA 2–1 X    │
+│ ● COACH   P2   ● 07:12 / 20:00    UPPÅKRA 2–1    │
 │ ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      │
+│  00–07 ✓    07–14 ◀ now    14–20                 │
 ├──────────────────────────────────────────────────┤
 │ ON FIELD (7)                              MIN    │
-│  G   Leo (4)                             38.5    │
-│  LB  Sam (7)                             31.0    │
-│  RB  Noah (2)                            45.5    │
-│  LM  Elias (9)                           40.0    │
-│  MM  Hugo (3)                            33.5    │
-│  RM  Axel (5)                            46.5    │
-│  F   Ville (11)                          44.0    │
+│  G   Leo 4                     38.5  [⚽] [⇄]    │
+│  LB  Sam 7                     31.0  [⚽] [⇄]    │
+│  RB  Noah 2                    45.5  [⚽] [⇄]    │
+│  LM  Elis 9                    40.0  [⚽] [⇄]    │
+│  MM  Hugo 3                    33.5  [⚽] [⇄]    │
+│  RM  Axel 5                    46.5  [⚽] [⇄]    │
+│  F   Ville 11                  44.0  [⚽] [⇄]    │
 ├──────────────────────────────────────────────────┤
 │ BENCH (2)                                 MIN    │
-│  Omar (8)                                12.0    │
-│  Isak (6)                                48.5    │
+│     Omar 8                     12.0      [⇄]     │
+│     Isak 6                     48.5      [⇄]     │
 ├──────────────────────────────────────────────────┤
-│ ┌────────────────┐ ┌─────────┐ ┌─────────┐       │
-│ │ ‖   STOP       │ │ ⚽ GOAL │ │ ⇄  SUB  │        │
-│ └────────────────┘ └─────────┘ └─────────┘       │
-└──────────────────────────────────────────────────┘
-
-── VIEW-ONLY VARIANT — another coach's phone ──
-
-┌──────────────────────────────────────────────────┐
-│ ○ VIEW     ● 07:12 / 20:00      UPPÅKRA 2–1 X    │
-│ ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░      │
-├──────────────────────────────────────────────────┤
-│  Read-only.  D is recording this match.          │
-│  Goals, subs and minutes stream in live.         │
-│                                                  │
-│  ON FIELD (7)                            MIN     │
-│   G   Leo (4)                           38.5     │
-│   RB  Noah (2)                          45.5     │
-│   ...                                            │
-│                                                  │
-│          [ TAKE OVER RECORDING ]                 │
+│ ┌────────────────┐ ┌─────────────┐ ┌──────┐      │
+│ │ ‖   STOP       │ │ THEIR GOAL  │ │  ⟲   │      │
+│ └────────────────┘ └─────────────┘ └──────┘      │
 └──────────────────────────────────────────────────┘
 ```
 
 Design notes:
-- **Position-grouped list, not a pitch diagram.** A pitch is delightful in a mock and horrible to tap with a glove. A read-only pitch view can come later.
-- **One minute column, `MIN`.** Goal minutes are included (D4), so the position cell already tells you who is in goal — a keeper's minutes *are* his minutes. No second column, nothing to add up.
-- One decimal. Coaches argue about half-minutes, and it makes the Σ checks verifiable.
-- Three big buttons. Everything else is a row tap, the clock face, or the overflow menu.
-- Bottom bar in thumb reach; nothing above 80 % of screen height is interactive during play.
 
-### 6.3 Sub / position sheet
+- **The player-context rule (D12).** Almost every action in a match is *about a
+  player*, so the control lives on that player's row: ⚽ logs a goal for him, ⇄
+  substitutes him. The bottom bar keeps only the three things that belong to no
+  single player — the clock, their goal, undo. This is why there is no "who
+  scored?" picker: the row already answered it.
+- **⚽ appears on on-field rows only.** A benched player cannot score, and the
+  missing button says so more clearly than a disabled one.
+- **44 px targets with a 10 px gap.** The density is the price of the saved tap.
+  It is affordable because neither button commits anything — both open a
+  reviewable step (§6.3) — and every action carries a 6 s undo.
+- **Position-grouped list, not a pitch diagram.** A pitch is delightful in a mock
+  and horrible to tap with a glove. A read-only pitch view can come later.
+- **One minute column, `MIN`.** Goal minutes are included (D4), so the position
+  cell already tells you who is in goal — a keeper's minutes *are* his minutes.
+- One decimal, tabular figures: coaches argue about half-minutes, and it makes
+  the Σ checks verifiable.
 
-```
-┌──────────────────────────────────────────────────┐
-│  SUBSTITUTION              P2 · 07:12            │
-│  OUT  Hugo (3)  MM   33.5                        │
-│  IN   Omar (8)  MM   12.0   · planned: Omar      │
-│  [ CONFIRM ]              [ CHANGE POSITION ]    │
-└──────────────────────────────────────────────────┘
-```
+### 6.3 The three player sheets
 
-Bench ordered by fewest minutes. The `planned:` hint is the only nod to the plan — information, not a recommendation (D9).
+Every write lands in one of four places, all anchored to the player that was tapped:
+
+| Entry point | Opens with | Then |
+|---|---|---|
+| ⚽ on an on-field row | Scorer pinned, **"Assist?"** | Tap a teammate, or **No assist — save goal** |
+| ⇄ on an on-field row | That player pinned red, **going off**, "Who comes on?" | Tap a bench player |
+| ⇄ on a bench row | That player pinned green, **coming on**, "Who comes off?" | Tap an on-field player |
+| Tap the player's name | Player sheet: log goal, substitute off, **change position**, edit minutes | *Change position* opens the seven slots, each labelled with its current occupant |
+
+Tap counts: assisted goal **2**, unassisted goal **2**, substitution **2**,
+position change **3** (name → change position → slot).
+
+The sub sheet has two mirrored states from one component — the only difference is
+which side is already chosen. That is what makes "the row is the context" work
+from either end.
+
+The `planned:` hint on the sub sheet remains the only nod to the plan:
+information, not a recommendation (D9).
 
 ### 6.4 Roster
 
@@ -615,6 +621,13 @@ GET  /api/teams/:slug/matches       history
 18. Coach logs a goal offline, other coach takes over, first reconnects → goal appears once, attributed correctly.
 19. Toggling EN↔SV switches every visible label including position codes (`LB` ↔ `VB`) and survives a reload.
 20. A key-parity test fails the build if `sv` is missing a key that `en` has.
+
+**Player-context actions (D12)**
+21. A goal is logged in exactly two taps: ⚽ on the scorer's row → tap an assister or *No assist*. No player picker appears at any point.
+22. ⇄ on a bench row opens the sheet with that player already marked *coming on* and the seven on-field players offered; ⇄ on an on-field row opens the mirror state. Both complete in two taps.
+23. The ⚽ button does not exist on bench rows in the DOM, not merely disabled.
+24. *Change position* from the player sheet lists all seven slots with the current occupant named on each, marks the player's own slot, and performs a swap in one tap.
+25. After a wrongly-tapped ⚽, the assist sheet's *change* link returns to scorer selection without leaving an event in the log.
 
 ## 15. Risks
 

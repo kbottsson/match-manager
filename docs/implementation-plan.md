@@ -37,10 +37,10 @@ Tests: `tests/engine.test.mjs` — 18 passing.
 
 ### Task 6 — Live screen
 - Clock: START/STOP, END PERIOD, period chip, overrun in red, `clock_adjust` behind the clock face.
-- On-field list by slot with `MIN` column; bench sorted by fewest minutes.
-- GOAL → scorer picker (on-field only) → optional assist. GOAL AGAINST.
-- SUB sheet: off/on pairs, `planned:` hint for the current block.
-- MOVE: tap player → tap new slot.
+- On-field list by slot with `MIN` column and per-row `⚽` / `⇄` buttons (D12); ⚽ absent on bench rows.
+- GOAL → assist prompt (2 taps), with *change* returning to scorer selection. THEIR GOAL in the bar.
+- SUB sheet in two mirrored states: off-first from an on-field row, on-first from a bench row.
+- Player sheet behind the name tap: change position (slot grid showing occupants), edit minutes.
 - Undo toast (6 s) + permanent undo in the header.
 
 ### Task 7 — Resume and correction
