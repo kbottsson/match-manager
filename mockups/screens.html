@@ -156,7 +156,15 @@
   .btn.wide.primary{background:var(--green);color:#fff;border-color:var(--green)}
   .note{margin:9px 14px 0;font-size:10.5px;line-height:1.45;color:var(--ink3)}
 
-  /* ---------- goal capture ---------- */
+  .rbtn{width:44px;height:44px;flex:none;border-radius:11px;border:1px solid #d8d2c6;background:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--ink2);padding:0}
+  .rbtn.goal{background:#fff;border:1px solid #d8d2c6;color:#000;font-size:18px}
+  .row .rbtn + .rbtn{margin-left:1px}
+  .row.tall{height:57px}
+  .row .min.w{width:46px;text-align:right}
+  .btn.goala{background:#fff;border:1.5px solid #cfc9bd;color:var(--ink);font-size:13px}
+  .btn.undo{flex:.55;background:#fff;border:1.5px solid #cfc9bd;font-size:19px;color:var(--ink2)}
+
   .sheet .q{margin:16px 0 0;font-size:15.5px;font-weight:700;letter-spacing:-.01em}
   .sheet .qsub{margin-top:3px;font-size:11.5px;color:var(--ink3)}
   .goalgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
@@ -239,7 +247,7 @@ const T = {
       next:'Next block',forp:'for',
       whoscored:'Who scored?',assistq:'Assist?',change:'change',
       tapassist:'Tap a teammate, or save without one',
-      noassist:'No assist — save goal'},
+      noassist:'No assist — save goal',theirgoal:'Their goal'},
   sv:{coach:'Tränare',view:'Vy',onfield:'På plan',bench:'Avbytare',min:'Min',
       stop:'Stopp',goal:'Mål',sub:'Byte',subst:'Byte',confirm:'Bekräfta',
       changepos:'Byt position',out:'Ut',in:'In',planned:'planerad denna period',
@@ -252,7 +260,7 @@ const T = {
       next:'Nästa block',forp:'för',
       whoscored:'Vem gjorde mål?',assistq:'Assist?',change:'ändra',
       tapassist:'Tryck på en lagkamrat, eller spara utan',
-      noassist:'Ingen assist – spara mål'},
+      noassist:'Ingen assist – spara mål',theirgoal:'Motståndarmål'},
 };
 const SLOT_ORDER = ['G','LB','RB','LM','MM','RM','F'];
 
@@ -272,21 +280,22 @@ function header(lang, mode, clock, score){
   </header>`;
 }
 
-function liveBody(lang){
+function liveBody(lang, v = 'none'){
   const L = SLOT_LABEL[lang], t = T[lang];
-  const on = ON_FIELD.map(([slot,id,min]) => `
-    <div class="row${slot === 'G' ? ' keeper' : ''}">
-      <span class="slot">${L[slot]}</span>
+  const inline = v === 'inline' || v === 'hybrid';
+  const row = (slot, id, min, bench) => {
+    const goalBtn = (!bench && v === 'inline') ? `<button class="rbtn goal" title="${t.goal}">⚽</button>` : '';
+    const tail = inline
+      ? `${goalBtn}<button class="rbtn" title="${t.sub}">⇄</button>`
+      : `<span class="dots">›</span>`;
+    return `<div class="row${slot === 'G' ? ' keeper' : ''}${inline ? ' tall' : ''}">
+      <span class="slot"${bench ? ' style="color:#bcb5a8"' : ''}>${bench ? '·' : L[slot]}</span>
       <span class="nm">${NAME[id].name}<span class="no">${NAME[id].no}</span></span>
-      <span class="min">${min.toFixed(1)}</span>
-    </div>`).join('');
-  const bench = BENCH.map(([id,min]) => `
-    <div class="row">
-      <span class="slot" style="color:#bcb5a8">·</span>
-      <span class="nm">${NAME[id].name}<span class="no">${NAME[id].no}</span></span>
-      <span class="min">${min.toFixed(1)}</span>
-      <span class="dots">›</span>
-    </div>`).join('');
+      <span class="min${inline ? ' w' : ''}">${min.toFixed(1)}</span>
+      ${tail}</div>`;
+  };
+  const on = ON_FIELD.map(([slot, id, min]) => row(slot, id, min, false)).join('');
+  const bench = BENCH.map(([id, min]) => row(null, id, min, true)).join('');
   return `<div class="bodyarea">
       <div class="blocks">
         <span class="blk done">00–07</span><span class="blk on">07–14</span><span class="blk">14–20</span>
@@ -300,8 +309,22 @@ function liveBody(lang){
     </div>`;
 }
 
-function actions(lang){
+function actions(lang, v = 'none'){
   const t = T[lang];
+  if (v === 'inline') {
+    return `<div class="actions">
+      <button class="btn stop"><span class="ico">❚❚</span>${t.stop}</button>
+      <button class="btn goala">${t.theirgoal}</button>
+      <button class="btn undo">⟲</button>
+    </div>`;
+  }
+  if (v === 'hybrid') {
+    return `<div class="actions">
+      <button class="btn stop"><span class="ico">❚❚</span>${t.stop}</button>
+      <button class="btn goal"><span class="ico">⚽</span>${t.goal}</button>
+      <button class="btn undo">⟲</button>
+    </div>`;
+  }
   return `<div class="actions">
     <button class="btn stop"><span class="ico">❚❚</span>${t.stop}</button>
     <button class="btn goal"><span class="ico">⚽</span>${t.goal}</button>
@@ -310,7 +333,7 @@ function actions(lang){
 }
 
 function liveScreen(lang){
-  return header(lang,'coach') + liveBody(lang) + actions(lang);
+  return header(lang,'coach') + liveBody(lang, VAR) + actions(lang, VAR);
 }
 
 function viewScreen(lang){
@@ -450,6 +473,7 @@ const SCREENS = {
 };
 
 const params = new URLSearchParams(location.search);
+const VAR = params.get('v') || 'none';
 const key = params.get('s') || 'live';
 const lang = params.get('lang') || (key === 'live-sv' ? 'sv' : 'en');
 const spec = SCREENS[key] || SCREENS.live;
