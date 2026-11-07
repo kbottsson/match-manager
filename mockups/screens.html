@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Match Manager — screen mockups</title>
+<style>
+  :root{
+    --ink:#101418; --ink2:#454e57; --ink3:#7b848d;
+    --bg:#fbfaf7; --panel:#ffffff; --line:#e3ded4; --line2:#efeae1;
+    --green:#0a6b36; --green-soft:#e9f3ec;
+    --red:#a8231c; --red-soft:#fbeceb;
+    --amber:#8a5300; --amber-soft:#fdf4e6;
+    --r:14px;
+    --num:ui-monospace,"SF Mono",SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:#e9e6df}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    color:var(--ink);
+    display:flex;justify-content:center;
+  }
+  .stage{
+    width:390px;height:844px;background:var(--bg);
+    display:flex;flex-direction:column;overflow:hidden;position:relative;
+  }
+  .caption{
+    height:30px;width:390px;background:#24282c;color:#cfd3d7;
+    font:500 10.5px/30px var(--num);letter-spacing:.12em;text-transform:uppercase;
+    text-align:center;
+  }
+  .wrap{width:390px}
+
+  /* ---------- header ---------- */
+  header{padding:12px 18px 10px;background:var(--bg);border-bottom:1px solid var(--line2)}
+  .toprow{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:600}
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;font-size:10px;letter-spacing:.08em}
+  .chip.coach{background:var(--green);color:#fff}
+  .chip.view{background:#e6e3dc;color:var(--ink2)}
+  .chip.period{background:#efebe3;color:var(--ink2)}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.9}
+  .scoreline{display:flex;align-items:flex-end;justify-content:space-between;margin-top:6px}
+  .clock{font:700 34px/1 var(--num);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .clock .of{font:500 12px/1 var(--num);color:var(--ink3);margin-left:6px}
+  .score{font:700 30px/1 var(--num);font-variant-numeric:tabular-nums}
+  .score .dash{color:var(--ink3);margin:0 4px;font-weight:500}
+  .bar{height:3px;background:#e6e1d7;border-radius:2px;margin-top:9px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--green);border-radius:2px}
+
+  /* ---------- sections / lists ---------- */
+  .bodyarea{flex:1;overflow:hidden;display:flex;flex-direction:column}
+  .sechead{display:flex;justify-content:space-between;align-items:center;
+    padding:11px 18px 5px;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+  .list{padding:0 10px}
+  .row{display:flex;align-items:center;gap:10px;height:52px;padding:0 8px;border-radius:10px}
+  .row + .row{margin-top:1px}
+  .row.keeper{background:var(--green-soft)}
+  .slot{width:34px;flex:none;font:700 11px/1 var(--num);letter-spacing:.06em;color:var(--ink2);text-align:center}
+  .row.keeper .slot{color:var(--green)}
+  .nm{flex:1;font-size:16px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nm .no{font:500 11px/1 var(--num);color:var(--ink3);margin-left:6px}
+  .min{font:600 17px/1 var(--num);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .dots{color:var(--ink3);font-size:16px;padding:0 6px}
+
+  /* ---------- action bar ---------- */
+  .actions{display:flex;gap:8px;padding:10px 12px 14px;background:var(--bg);border-top:1px solid var(--line2)}
+  .btn{flex:1;height:62px;border:0;border-radius:12px;font:700 15px/1.1 -apple-system,sans-serif;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;letter-spacing:.02em}
+  .btn .ico{font-size:19px;line-height:1}
+  .btn.stop{flex:1.35;background:var(--red);color:#fff}
+  .btn.goal{background:var(--ink);color:#fff}
+  .btn.sub{background:#fff;color:var(--ink);border:1.5px solid #cfc9bd}
+
+  /* ---------- planner ---------- */
+  .planhead{display:flex;justify-content:space-between;align-items:center;padding:12px 16px 8px}
+  .planhead .t{font-size:13px;font-weight:700;letter-spacing:-.01em}
+  .planhead .s{font-size:11px;color:var(--ink3);margin-top:2px}
+  .pills{display:flex;gap:6px}
+  .pill{font:600 11px/1 var(--num);padding:7px 9px;border-radius:8px;background:#fff;border:1px solid var(--line);color:var(--ink2)}
+  .pill.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .grid{margin:4px 10px 0;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .grid table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .grid th{font:700 9.5px/1 var(--num);letter-spacing:.04em;color:var(--ink3);
+    padding:7px 0;background:#f6f3ee;border-bottom:1px solid var(--line);text-align:center}
+  .grid th:first-child{width:52px;text-align:left;padding-left:8px}
+  .grid td{font-size:10px;font-weight:600;text-align:center;padding:6px 0;border-bottom:1px solid var(--line2);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.03em}
+  .grid tr:last-child td{border-bottom:0}
+  .grid td.lbl{font:600 9px/1 var(--num);color:var(--ink3);text-align:left;padding-left:8px;letter-spacing:0}
+  .grid td.gk{color:var(--green);background:var(--green-soft)}
+  .grid tr.tail td{background:#fcfbf8}
+  /* ==FORECAST_CSS== */
+
+  /* ---------- sub sheet ---------- */
+  .scrim{position:absolute;inset:0;background:rgba(16,20,24,.42)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;
+    padding:14px 18px 20px;box-shadow:0 -12px 40px rgba(0,0,0,.18)}
+  .grab{width:38px;height:4px;border-radius:2px;background:#d9d3c8;margin:0 auto 12px}
+  .sheet h2{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+  .sheet .when{font:600 11px/1 var(--num);color:var(--ink3);float:right}
+  .swap{margin-top:12px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .swap .line{display:flex;align-items:center;gap:10px;padding:13px 12px}
+  .swap .line + .line{border-top:1px solid var(--line2)}
+  .tag{font:700 9.5px/1 var(--num);letter-spacing:.1em;padding:5px 7px;border-radius:6px}
+  .tag.off{background:var(--red-soft);color:var(--red)}
+  .tag.on{background:var(--green-soft);color:var(--green)}
+  .hint{margin-top:10px;font-size:12px;color:var(--ink2);display:flex;gap:6px;align-items:center}
+  .hint .tagplan{font:700 9px/1 var(--num);letter-spacing:.08em;padding:4px 6px;border-radius:5px;
+    border:1px dashed #b9b2a4;color:var(--ink2)}
+  .sheet .btnrow{display:flex;gap:8px;margin-top:14px}
+  .btn.primary{background:var(--green);color:#fff;height:58px}
+  .btn.ghost{background:#fff;border:1.5px solid #cfc9bd;color:var(--ink);height:58px;flex:.9}
+
+  /* ---------- recap ---------- */
+  .recap{flex:1;overflow:hidden;padding:0 18px}
+  .goalline{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line2);font-size:13px}
+  .goalline .t{font:600 11px/1 var(--num);color:var(--ink3);width:42px;flex:none}
+  .goalline b{font-weight:700}
+  .goalline .a{color:var(--ink3);font-size:12px}
+  .statbar{flex:1;height:7px;background:#ece7dd;border-radius:4px;overflow:hidden;margin:0 8px}
+  .statbar > i{display:block;height:100%;background:var(--green);border-radius:4px}
+  .sumcheck{margin-top:10px;padding:11px 12px;border-radius:10px;background:var(--green-soft);color:var(--green);
+    font:600 11.5px/1.4 var(--num);letter-spacing:.02em}
+  /* ---------- forecast ---------- */
+  .fc{margin:8px 10px 0;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .fc .hd{display:flex;justify-content:space-between;padding:8px 12px;background:#f6f3ee;
+    font:700 9.5px/1 var(--num);letter-spacing:.1em;color:var(--ink3);border-bottom:1px solid var(--line)}
+  .fc .ln{display:flex;align-items:center;height:29px;padding:0 12px;font-size:12.5px}
+  .fc .ln.sub{color:var(--ink3);font-size:11.5px;letter-spacing:.04em}
+  .fc .nm2{width:56px;flex:none;font-weight:600}
+  .fc .track{flex:1;height:6px;background:#eeeae1;border-radius:3px;overflow:hidden;margin:0 9px}
+  .fc .track > i{display:block;height:100%;background:#9ab8a5;border-radius:3px}
+  .fc .track > i.hi{background:var(--green)}
+  .fc .v{width:34px;text-align:right;font:600 12px/1 var(--num);font-variant-numeric:tabular-nums}
+  .fc .g{width:30px;text-align:right;font:500 11px/1 var(--num);color:var(--ink3)}
+  .fc .sum{display:flex;justify-content:space-between;padding:8px 12px;border-top:1px solid var(--line2);
+    font:600 10.5px/1 var(--num);letter-spacing:.04em;color:var(--ink2)}
+
+  /* ---------- view-only ---------- */
+  .vban{margin:12px 14px 0;padding:11px 13px;border-radius:11px;background:var(--amber-soft);
+    border:1px solid #efdcbd;color:var(--amber);font-size:12.5px;line-height:1.45}
+  .vban b{font-weight:700}
+  .push{margin-top:auto}
+  .blocks{display:flex;gap:5px;padding:10px 18px 0}
+  .blk{flex:1;height:27px;border-radius:7px;background:#efeae1;display:flex;align-items:center;
+    justify-content:center;font:700 9px/1 var(--num);color:#8d8578;letter-spacing:.06em}
+  .blk.done{background:#e4e0d6;color:#6f675b}
+  .blk.on{background:var(--green-soft);color:var(--green);box-shadow:inset 0 0 0 1.5px rgba(10,107,54,.3)}
+  .nextline{display:flex;align-items:center;gap:8px;margin:0 18px 12px;padding-top:10px;
+    border-top:1px dashed #ded8cc;font-size:11.5px;color:var(--ink3)}
+  .nextline b{color:var(--ink2);font-weight:600}
+  .pullbar{padding:10px 12px 16px;background:var(--bg);border-top:1px solid var(--line2)}
+  .btn.wide{width:100%;height:56px;background:#fff;border:1.5px solid #cfc9bd;color:var(--ink);font-size:14px}
+  .btn.wide.primary{background:var(--green);color:#fff;border-color:var(--green)}
+  .note{margin:9px 14px 0;font-size:10.5px;line-height:1.45;color:var(--ink3)}
+
+
+/* ==MORE_CSS== */
+</style>
+</head>
+<body>
+<div class="wrap">
+<div id="app"></div>
+<script>
+const ROSTER = [
+  {id:'leo',  name:'Leo',   no:4},  {id:'sam',  name:'Sam',   no:7},
+  {id:'noah', name:'Noah',  no:2},  {id:'elis', name:'Elis',  no:9},
+  {id:'hugo', name:'Hugo',  no:3},  {id:'axel', name:'Axel',  no:5},
+  {id:'ville',name:'Ville', no:11}, {id:'omar', name:'Omar',  no:8},
+  {id:'isak', name:'Isak',  no:6},
+];
+const NAME = Object.fromEntries(ROSTER.map(p => [p.id, p]));
+const NO  = Object.fromEntries(ROSTER.map(p => [p.id, p.no]));
+
+const ON_FIELD = [
+  ['G','leo',38.5], ['LB','sam',31.0], ['RB','noah',45.5], ['LM','elis',40.0],
+  ['MM','hugo',33.5], ['RM','axel',46.5], ['F','ville',44.0],
+];
+const BENCH = [['omar',12.0], ['isak',48.5]];
+
+const PLAN = [
+  ['00–07','leo','sam','noah','omar','hugo','ville','isak'],
+  ['07–14','leo','noah','axel','omar','elis','ville','isak'],
+  ['14–20','leo','sam','noah','elis','hugo','axel','ville'],
+  ['00–07','leo','sam','elis','omar','hugo','axel','isak'],
+  ['07–14','leo','sam','noah','omar','hugo','ville','isak'],
+  ['14–20','leo','sam','noah','elis','hugo','axel','ville'],
+  ['00–07','leo','noah','axel','omar','elis','ville','isak'],
+  ['07–14','leo','sam','elis','omar','hugo','axel','isak'],
+  ['14–20','leo','sam','noah','elis','hugo','axel','ville'],
+];
+const PLAN_PERIOD = ['P1','P1','P1','P2','P2','P2','P3','P3','P3'];
+const FORECAST = [
+  ['Leo',60.0,60.0], ['Sam',46.0,0], ['Noah',46.0,0], ['Elis',46.0,0],
+  ['Hugo',46.0,0], ['Axel',46.0,0], ['Ville',46.0,0], ['Omar',42.0,0], ['Isak',42.0,0],
+];
+
+const RECAP_GOALS = [
+  ['06:12','Ville','Elis'], ['23:40','Omar','Sam'], ['41:05','Hugo','Ville'],
+];
+const RECAP_MIN = [
+  ['Leo',60.0,'G'], ['Axel',46.0,'M'], ['Noah',46.0,'B'], ['Sam',46.0,'B'],
+  ['Ville',46.0,'F'], ['Hugo',46.0,'M'], ['Elis',46.0,'M'], ['Omar',42.0,'M'], ['Isak',42.0,'F'],
+];
+
+const SLOT_LABEL = {
+  en:{G:'G',LB:'LB',RB:'RB',LM:'LM',MM:'MM',RM:'RM',F:'F'},
+  sv:{G:'MÅL',LB:'VB',RB:'HB',LM:'VM',MM:'MM',RM:'HM',F:'A'},
+};
+const T = {
+  en:{coach:'Coach',view:'View',onfield:'On field',bench:'Bench',min:'Min',
+      stop:'Stop',goal:'Goal',sub:'Sub',subst:'Substitution',confirm:'Confirm',
+      changepos:'Change position',out:'Out',in:'In',planned:'planned for this block',
+      forecast:'Forecast',behind:'Σ of all seven slots',share:'Share recap',
+      period:'Period 2',team:'Uppåkra P16',opp:'vs Lunds BK',
+      read:'Read-only. <b>D</b> is recording this match.',
+      readsub:'Goals, subs and minutes stream in live.',
+      takeover:'Take over recording',plan:'Plan',blocklen:'7 min',
+      goals:'Goals',minutes:'Minutes',sum:'Σ MIN 420.0 = 7 × 60',spread:'spread 4.0',
+      next:'Next block',forp:'for'},
+  sv:{coach:'Tränare',view:'Vy',onfield:'På plan',bench:'Avbytare',min:'Min',
+      stop:'Stopp',goal:'Mål',sub:'Byte',subst:'Byte',confirm:'Bekräfta',
+      changepos:'Byt position',out:'Ut',in:'In',planned:'planerad denna period',
+      forecast:'Prognos',behind:'Σ av alla sju platser',share:'Dela sammanfattning',
+      period:'Period 2',team:'Uppåkra P16',opp:'mot Lunds BK',
+      read:'Endast visning. <b>D</b> registrerar matchen.',
+      readsub:'Mål, byten och speltid uppdateras direkt.',
+      takeover:'Ta över registreringen',plan:'Plan',blocklen:'7 min',
+      goals:'Mål',minutes:'Speltid',sum:'Σ SPELTID 420,0 = 7 × 60',spread:'spridning 4,0',
+      next:'Nästa block',forp:'för'},
+};
+const SLOT_ORDER = ['G','LB','RB','LM','MM','RM','F'];
+
+function header(lang, mode, clock, score){
+  const t = T[lang];
+  const chip = mode === 'view'
+    ? `<span class="chip view"><i class="dot"></i>${t.view}</span>`
+    : `<span class="chip coach"><i class="dot"></i>${t.coach}</span>`;
+  return `<header>
+    <div class="toprow">${chip}<span class="chip period">${mode==='final'?'Full time':t.period}</span>
+      <span style="flex:1"></span><span>${t.team}</span></div>
+    <div class="scoreline">
+      <div class="clock">${clock||'07:12'}${clock?'':`<span class="of">/20:00</span>`}</div>
+      <div class="score">${score||'2<span class="dash">–</span>1'}</div>
+    </div>
+    <div class="bar"><i style="width:${clock?'100%':'36%'}"></i></div>
+  </header>`;
+}
+
+function liveBody(lang){
+  const L = SLOT_LABEL[lang], t = T[lang];
+  const on = ON_FIELD.map(([slot,id,min]) => `
+    <div class="row${slot === 'G' ? ' keeper' : ''}">
+      <span class="slot">${L[slot]}</span>
+      <span class="nm">${NAME[id].name}<span class="no">${NAME[id].no}</span></span>
+      <span class="min">${min.toFixed(1)}</span>
+    </div>`).join('');
+  const bench = BENCH.map(([id,min]) => `
+    <div class="row">
+      <span class="slot" style="color:#bcb5a8">·</span>
+      <span class="nm">${NAME[id].name}<span class="no">${NAME[id].no}</span></span>
+      <span class="min">${min.toFixed(1)}</span>
+      <span class="dots">›</span>
+    </div>`).join('');
+  return `<div class="bodyarea">
+      <div class="blocks">
+        <span class="blk done">00–07</span><span class="blk on">07–14</span><span class="blk">14–20</span>
+      </div>
+      <div class="sechead"><span>${t.onfield}</span><span>${t.min}</span></div>
+      <div class="list">${on}</div>
+      <div class="sechead"><span>${t.bench}</span><span>${t.min}</span></div>
+      <div class="list">${bench}</div>
+      <div class="nextline push"><span class="tagplan">plan</span>
+        ${t.next} 14–20 · <b>Omar</b> ${t.forp} <b>Hugo</b></div>
+    </div>`;
+}
+
+function actions(lang){
+  const t = T[lang];
+  return `<div class="actions">
+    <button class="btn stop"><span class="ico">❚❚</span>${t.stop}</button>
+    <button class="btn goal"><span class="ico">⚽</span>${t.goal}</button>
+    <button class="btn sub"><span class="ico">⇄</span>${t.sub}</button>
+  </div>`;
+}
+
+function liveScreen(lang){
+  return header(lang,'coach') + liveBody(lang) + actions(lang);
+}
+
+function viewScreen(lang){
+  const t = T[lang];
+  return header(lang,'view') + `<div class="vban">${t.read}<br><span style="opacity:.85">${t.readsub}</span></div>`
+    + liveBody(lang)
+    + `<div class="pullbar"><button class="btn wide">${t.takeover}</button></div>`;
+}
+
+function subScreen(lang){
+  const t = T[lang];
+  return header(lang,'coach') + liveBody(lang) + actions(lang) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.subst}<span class="when">P2 · 07:12</span></h2>
+      <div class="swap">
+        <div class="line">
+          <span class="tag off">${t.out}</span>
+          <span class="nm">Hugo<span class="no">3</span></span>
+          <span class="slot" style="width:auto">MM</span>
+          <span class="min">33.5</span>
+        </div>
+        <div class="line">
+          <span class="tag on">${t.in}</span>
+          <span class="nm">Omar<span class="no">8</span></span>
+          <span class="slot" style="width:auto">MM</span>
+          <span class="min">12.0</span>
+        </div>
+      </div>
+      <div class="hint"><span class="tagplan">plan</span>${t.planned}: <b>Omar</b></div>
+      <div class="btnrow">
+        <button class="btn primary">${t.confirm}</button>
+        <button class="btn ghost">${t.changepos}</button>
+      </div>
+    </div>`;
+}
+
+function planScreen(lang){
+  const t = T[lang], L = SLOT_LABEL[lang];
+  const head = `<tr><th></th>${SLOT_ORDER.map(s => `<th>${L[s]}</th>`).join('')}</tr>`;
+  const rows = PLAN.map((r,i) => `
+    <tr${i % 3 === 2 ? ' class="tail"' : ''}>
+      <td class="lbl">${PLAN_PERIOD[i]} ${r[0]}</td>
+      ${r.slice(1).map((id,j) => `<td${j === 0 ? ' class="gk"' : ''}>${NAME[id].name}</td>`).join('')}
+    </tr>`).join('');
+  const fc = FORECAST.map(([nm,min,g]) => `
+    <div class="ln"><span class="nm2">${nm}</span>
+      <span class="track"><i class="${min >= 46 ? 'hi' : ''}" style="width:${(min/60*100).toFixed(1)}%"></i></span>
+      <span class="v">${min.toFixed(1)}</span>
+      <span class="g">${g ? g.toFixed(1) : '—'}</span></div>`).join('');
+  return `
+    <div class="planhead">
+      <div><div class="t">${t.plan} · ${t.team}</div><div class="s">${t.opp} · 3 × 20</div></div>
+      <div class="pills"><span class="pill on">${t.blocklen} ▾</span></div>
+    </div>
+    <div class="grid"><table>${head}${rows}</table></div>
+    <div class="fc">
+      <div class="hd"><span>${t.forecast}</span><span>${t.min} · G</span></div>
+      ${fc}
+      <div class="sum"><span>${t.sum}</span><span>${t.spread}</span></div>
+    </div>
+    <div class="note">9 blocks × 6 outfield slots = 54 ÷ 8 players → two players must play one block
+      fewer. A 4.0 spread is the arithmetic floor for a 7/7/6 grid; 5-minute blocks would give 0.</div>`;
+}
+
+function recapScreen(lang){
+  const t = T[lang];
+  const goals = RECAP_GOALS.map(([tm,who,assist]) => `
+    <div class="goalline"><span class="t">${tm}</span><b>${who}</b>
+      <span class="a">← ${assist}</span></div>`).join('');
+  const mins = RECAP_MIN.map(([nm,min,line]) => `
+    <div class="ln"><span class="nm2">${nm}</span>
+      <span class="slot" style="width:22px;text-align:left">${line}</span>
+      <span class="track"><i class="${min >= 46 ? 'hi' : ''}" style="width:${(min/60*100).toFixed(1)}%"></i></span>
+      <span class="v">${min.toFixed(1)}</span></div>`).join('');
+  return header(lang,'final','60:00','3<span class="dash">–</span>1') + `
+    <div class="recap">
+      <div class="sechead"><span>${t.goals}</span><span>3 – 1</span></div>
+      ${goals}
+      <div class="sechead" style="padding-left:0;padding-right:0"><span>${t.minutes}</span><span>${t.min}</span></div>
+      <div class="fc" style="margin:0">${mins}</div>
+      <div class="sumcheck">${t.sum} ✔</div>
+    </div>
+    <div class="pullbar"><button class="btn wide primary">${t.share}</button></div>`;
+}
+
+const SCREENS = {
+  live:      {n:1, label:'LIVE — COACH MODE', html:liveScreen},
+  plan:      {n:2, label:'PLAN — PRE-MATCH', html:planScreen},
+  sub:       {n:3, label:'SUBSTITUTION SHEET', html:subScreen},
+  recap:     {n:4, label:'RECAP — FULL TIME', html:recapScreen},
+  view:      {n:5, label:'READ-ONLY', html:viewScreen},
+  'live-sv': {n:6, label:'LIVE — SVENSKA', html:liveScreen},
+};
+
+const params = new URLSearchParams(location.search);
+const key = params.get('s') || 'live';
+const lang = params.get('lang') || (key === 'live-sv' ? 'sv' : 'en');
+const spec = SCREENS[key] || SCREENS.live;
+
+document.getElementById('app').innerHTML = `
+  <div class="stage">${spec.html(lang)}</div>
+  <div class="caption">mockup · ${spec.n} ${spec.label}</div>`;
+
+</script>
+
+</div>
+</body>
+</html>
