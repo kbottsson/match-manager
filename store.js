@@ -98,6 +98,13 @@ export function createStore(storage = globalThis.localStorage) {
       });
     },
 
+    /** Hard-deletes a match and its plan/events. Used only by an explicit confirm. */
+    deleteMatch(id) {
+      const all = listMatches().filter((m) => m.id !== id);
+      try { storage.removeItem(K.events(id)); storage.removeItem(K.plan(id)); } catch { /* ignore */ }
+      return write(K.matches, all);
+    },
+
     /* ---- bulk ---- */
     exportAll() {
       const matches = read(K.matches, []);

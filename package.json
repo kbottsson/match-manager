@@ -6,6 +6,7 @@
   "description": "Match-day playing-time, substitution and scoring manager for youth football (7-a-side, 3 x 20)",
   "scripts": {
     "test": "node --test 'tests/*.test.mjs'",
+    "test:ui": "node tests/ui.smoke.mjs",
     "serve": "python3 -m http.server 8080"
   }
 }

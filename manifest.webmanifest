@@ -1,0 +1,15 @@
+{
+  "name": "Match Manager",
+  "short_name": "Match",
+  "description": "Playing time, substitutions, goals and assists for 7-a-side youth football.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fbfaf7",
+  "theme_color": "#fbfaf7",
+  "lang": "sv",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

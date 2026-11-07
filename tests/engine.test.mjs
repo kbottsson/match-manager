@@ -268,6 +268,33 @@ test('project: clock_adjust moves the minutes with the clock', () => {
   assertInvariant(s);
 });
 
+test('project: a player cannot occupy two slots at once', () => {
+  const events = [
+    lineup(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']),
+    ev('period_start', at(0), { period: 1 }),
+    // p2 is already at LB; a malformed sub that moves him without taking anyone off
+    ev('sub', at(5), { off: [], on: ['p8'], slots: { p8: 'F' } }),
+    ev('move', at(6), { player: 'p2', from: 'LB', to: 'F' }),
+  ];
+  const s = project(events, CONFIG, at(10));
+  const appearances = Object.values(s.onField).filter(Boolean);
+  assert.equal(new Set(appearances).size, appearances.length, 'no player twice');
+  assertInvariant(s);
+});
+
+test('project: minutes are never double counted for one player', () => {
+  const events = [
+    lineup(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']),
+    ev('period_start', at(0), { period: 1 }),
+    ev('sub', at(5), { off: ['p7'], on: ['p8'], slots: { p8: 'F' } }),
+  ];
+  const s = project(events, CONFIG, at(10));
+  for (const p of Object.values(s.players)) {
+    assert.ok(p.playMs <= s.totalRunningMs + 1, 'nobody exceeds elapsed time');
+  }
+  assertInvariant(s);
+});
+
 /* ---------------------------------------------------------------- *
  * The invariant, under abuse
  * ---------------------------------------------------------------- */

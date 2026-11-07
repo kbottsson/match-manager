@@ -81,6 +81,17 @@ export default {
   history: 'Historik',
   noMatches: 'Inga matcher än',
 
+  tabMatch: 'Match', tabSquad: 'Trupp', tabHistory: 'Historik',
+  newMatch: 'Ny match', opponent: 'Motståndare', venue: 'Plats', kickoff: 'Datum',
+  periods: 'Perioder', minutesEach: 'Minuter per period',
+  createMatch: 'Skapa match', openPlan: 'Planera matchen', startMatch: 'Starta match',
+  squadEmpty: 'Inga spelare än. Lägg upp truppen en gång – den återanvänds varje match.',
+  addPlayer: 'Lägg till spelare', playerName: 'Spelare', shirtNo: 'Nr',
+  teamName: 'Lagnamn', done: 'Klar', deleteMatch: 'Ta bort match',
+  noMatch: 'Ingen match än', inProgress: 'Pågår',
+  positionPrefs: 'Föredragna positioner', optional: 'valfritt',
+  deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?',
+
   pos: {
     G: { code: 'MÅL', name: 'Målvakt' },
     LB: { code: 'VB', name: 'Vänster back' },

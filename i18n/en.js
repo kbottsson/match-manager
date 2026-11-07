@@ -91,6 +91,17 @@ export default {
   history: 'History',
   noMatches: 'No matches yet',
 
+  tabMatch: 'Match', tabSquad: 'Squad', tabHistory: 'History',
+  newMatch: 'New match', opponent: 'Opponent', venue: 'Venue', kickoff: 'Date',
+  periods: 'Periods', minutesEach: 'Minutes per period',
+  createMatch: 'Create match', openPlan: 'Plan the match', startMatch: 'Start match',
+  squadEmpty: 'No players yet. Add your squad once — it is reused every match.',
+  addPlayer: 'Add player', playerName: 'Player', shirtNo: 'No.',
+  teamName: 'Team name', done: 'Done', deleteMatch: 'Delete match',
+  noMatch: 'No match yet', inProgress: 'In progress',
+  positionPrefs: 'Preferred positions', optional: 'optional',
+  deletePlayer: 'Remove', confirmDelete: 'Delete this match and its log?',
+
   pos: {
     G: { code: 'G', name: 'Goalie' },
     LB: { code: 'LB', name: 'Back left' },

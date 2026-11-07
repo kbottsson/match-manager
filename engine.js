@@ -237,6 +237,14 @@ export function project(events = [], config = {}, nowMs = Date.now()) {
       st.warnings.push({ kind: 'bad_slot', slot, playerId: pid });
       return;
     }
+    // A player can only occupy one slot: if he is already out there, this is a
+    // move, not a second appearance (which would double-count his minutes).
+    for (const [other, occupant] of Object.entries(st.onField)) {
+      if (occupant === pid && other !== slot) {
+        closeStint(pid, totalRunning());
+        delete st.onField[other];
+      }
+    }
     const prev = st.onField[slot];
     if (prev && prev !== pid) closeStint(prev, totalRunning());
     if (!pid) {
