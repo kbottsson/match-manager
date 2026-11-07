@@ -177,7 +177,9 @@ Seven slots plus a bench tag. Codes are what the UI shows on a cramped grid; nam
 
 Before kickoff the coach draws the match: who plays where, in each block of time.
 
-**Grid.** Rows = time blocks, columns = the 7 slots. **Default block = 7 minutes, giving three blocks per period and therefore two substitutions per period** — exactly your coaching rhythm. Because three 7s make 21 minutes, the last block of each period is clipped to the period end: rows read `00–07`, `07–14`, `14–20`. Nine rows per match.
+**Grid.** One table per period: **the seven positions are rows, and that period's time blocks are columns** (three columns at 7-minute blocks). **Default block = 7 minutes, giving three blocks per period and therefore two substitutions per period** — exactly your coaching rhythm. Because three 7s make 21 minutes, the last block of each period is clipped to the period end, so the columns read `00–07`, `07–14`, `14–20`.
+
+Positions run down the page because names are long and clock blocks are few: what was seven cramped 45-pixel columns is now three comfortable ones, and a **bench row under each period names the players sitting out each block** — the thing the old sideways grid could not show at all. The cost is vertical scroll (roughly two periods per phone screen), which is the right trade for a screen you use the night before, not under time pressure.
 
 The dropdown also offers `5 min`, `10 min` and `6:40 exact` for the rare match where you want a different rhythm.
 
@@ -259,28 +261,25 @@ Six screens.
 ### 6.1 Planner (pre-match)
 
 ```
-┌──────────────────────────────────────────────────┐
-│  PLAN · UPPÅKRA P16 vs X    [7 min ▾]    EN/SV   │
-├──────────────────────────────────────────────────┤
-│           G    LB   RB   LM   MM   RM   F        │
-│  P1 00-07 Leo  Sam  Noah Omar Hugo Vill Isak     │
-│  P1 07-14 Leo  Noah Axel Omar Elis Vill Isak     │
-│  P1 14-20 Leo  Sam  Noah Elis Hugo Axel Vill     │
-│  P2 00-07 Leo  Sam  Elis Omar Hugo Axel Isak     │
-│  P2 07-14 Leo  Sam  Noah Omar Hugo Vill Isak     │
-│  P2 14-20 Leo  Sam  Noah Elis Hugo Axel Vill     │
-│  P3 00-07 Leo  Noah Axel Omar Elis Vill Isak     │
-│  P3 07-14 Leo  Sam  Elis Omar Hugo Axel Isak     │
-│  P3 14-20 Leo  Sam  Noah Elis Hugo Axel Vill     │
-├──────────────────────────────────────────────────┤
-│  FORECAST           MIN   of G                   │
-│  Leo               60.0   60.0                   │
-│  Sam               46.0      —                   │
-│  Omar              42.0      —                   │
-│  ···                                             │
-│                                                  │
-│  Σ MIN 420.0 ✓   spread 4.0                      │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ PLAN · UPPÅKRA P16 · 3 × 20        Cancel    │
+│ Lunds BK                                     │
+├──────────────────────────────────────────────┤
+│ PERIOD 1   00–20                             │
+│          00–07     07–14     14–20           │
+│  G    Leo       Leo       Leo                │
+│  LB   Sam       Noah      Sam                │
+│  RB   Noah      Axel      Noah               │
+│  LM   Omar      Omar      Elis               │
+│  MM   Hugo      Elis      Hugo               │
+│  RM   Ville     Ville     Axel               │
+│  F    Isak      Isak      Ville              │
+│  BÄNK   Elis,      Sam,       Omar,          │
+│         Axel       Hugo       Isak           │
+│                                              │
+│ PERIOD 2   … (same shape)                    │
+│ PERIOD 3   … (same shape)                    │
+└──────────────────────────────────────────────┘
 ```
 
 - Cells are large; the grid scrolls horizontally only below ~375 px.

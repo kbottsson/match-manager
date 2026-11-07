@@ -327,46 +327,64 @@ function viewPlan() {
   const f = planForecast(s.plan, c, s.team.players);
   const cellAt = (bi, slot) => s.plan.find((x) => x.blockIndex === bi && x.slot === slot)?.playerId;
 
-  const head = `<tr><th></th>${SLOTS.map((sl) => `<th>${P(sl)}</th>`).join('')}</tr>`;
-  const rows = blocks.map((b) => `<tr>
-      <td class="lbl">P${b.period} ${b.label}</td>
-      ${SLOTS.map((sl) => {
-        const pid = cellAt(b.blockIndex, sl);
-        const name = pid ? player(pid).name : '+';
-        return `<td class="${!pid ? 'empty' : sl === 'G' ? 'gk' : ''}" data-act="cell:${b.blockIndex}:${sl}">${esc(name)}</td>`;
-      }).join('')}
-    </tr>`).join('');
+  // One table per period: positions are rows, the period's time blocks are columns.
+  const tables = [];
+  for (let period = 1; period <= c.periodCount; period++) {
+    const list = blocks.filter((b) => b.period === period);
+    if (!list.length) continue;
+    const span = `${list[0].label.split('–')[0]}–${list[list.length - 1].label.split('–')[1]}`;
+
+    const head = `<tr><th></th>${list.map((b) => `<th>${b.label}</th>`).join('')}</tr>`;
+    const rows = SLOTS.map((slot) => `<tr>
+        <td class="lbl">${P(slot)}</td>
+        ${list.map((b) => {
+          const pid = cellAt(b.blockIndex, slot);
+          return `<td class="cell${pid ? '' : ' empty'}${pid && slot === 'G' ? ' gk' : ''}"
+            data-act="cell:${b.blockIndex}:${slot}">${pid ? esc(player(pid).name) : '+'}</td>`;
+        }).join('')}
+      </tr>`).join('');
+
+    const benchRow = `<tr class="bench">
+        <td class="lbl">${T('benchShort')}</td>
+        ${list.map((b) => {
+          const used = new Set(s.plan.filter((x) => x.blockIndex === b.blockIndex).map((x) => x.playerId));
+          const rest = s.team.players.filter((pl) => !used.has(pl.id));
+          return `<td class="cell">${rest.length ? rest.map((r) => esc(r.name)).join(', ') : '—'}</td>`;
+        }).join('')}
+      </tr>`;
+
+    tables.push(`<div class="phead2">${T('periodN', { n: period }).toUpperCase()}<span>${span}</span></div>
+      <div class="ptable"><table>${head}${rows}${benchRow}</table></div>`);
+  }
 
   const forecast = Object.values(f.players)
     .sort((a, b2) => b2.minMs - a.minMs)
-    .map((p) => `<div class="ln"><span class="nm2">${esc(player(p.id).name)}</span>
-      <span class="track"><i class="${p.minMs >= 46 * MIN ? 'hi' : ''}" style="width:${(p.minMs / (c.periodCount * c.periodMinutes * MIN) * 100).toFixed(1)}%"></i></span>
-      <span class="v">${fmtMin(p.minMs)}</span>
-      <span class="g">${p.gkMs ? fmtMin(p.gkMs) : '—'}</span></div>`).join('');
+    .map((pl) => `<div class="ln"><span class="nm2">${esc(player(pl.id).name)}</span>
+      <span class="track"><i class="${pl.minMs >= 46 * MIN ? 'hi' : ''}" style="width:${(pl.minMs / (c.periodCount * c.periodMinutes * MIN) * 100).toFixed(1)}%"></i></span>
+      <span class="v">${fmtMin(pl.minMs)}</span>
+      <span class="g">${pl.gkMs ? fmtMin(pl.gkMs) : '—'}</span></div>`).join('');
 
   const err = f.errors[0];
   const errHtml = err ? `<div class="err">${err.kind === 'empty_slots'
     ? T('emptySlot', { block: err.blockIndex + 1, slot: err.missing?.map(P).join(', ') })
     : T('doubleBooked', { block: (err.blockIndex ?? 0) + 1, name: player(err.playerId).name })}</div>` : '';
 
-  return headerPlain(T('plan'), s.match?.opponent || '', `<button class="chip period" data-act="nav:setup">${T('cancel')}</button>`)
+  return headerPlain(`${T('plan')} · ${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes}`,
+    s.match?.opponent || '',
+    `<button class="chip period" data-act="nav:setup">${T('cancel')}</button>`)
     + `<div class="view">
-      <div class="planhead">
-        <div><div class="t">${T('planFor', { team: s.team.name })}</div>
-        <div class="s">${c.periodCount} × ${c.periodMinutes} · ${T('blockLength')} ${c.blockMinutes}</div></div>
-      </div>
       ${errHtml}
-      <div class="gridwrap"><table class="grid">${head}${rows}</table></div>
+      ${tables.join('')}
       <div class="fc">
         <div class="hd"><span>${T('forecast')}</span><span>${T('min')} · ${P('G')}</span></div>
         ${forecast || `<div class="ln"><span class="nm2"></span><span class="muted">—</span></div>`}
         <div class="sum"><span>Σ ${fmtMin(f.totalMs)} / ${fmtMin(f.expectedMs)}</span>
           <span>${T('spread')} ${fmtMin(f.spreadMs)}</span></div>
       </div>
-      <div class="note">${T('blockLength')}: ${c.blockMinutes} min · ${blocks.length} blocks · ${T('min')} ${c.periodMinutes} × ${c.periodCount}</div>
+      <div class="note">${T('tapEmptyCell')}</div>
     </div>
     <div class="actions">
-      <button class="btn wide" data-act="autoplan">Auto-fill</button>
+      <button class="btn wide" data-act="autoplan">${T('autoFill')}</button>
       <button class="btn primary" data-act="startmatch">${T('startMatch')}</button>
     </div>`;
 }
@@ -946,6 +964,11 @@ ensureTeam();
 // First run: land where the work is, not on an empty tab.
 if (!s.team.players.length) s.tab = 'squad';
 if (new URLSearchParams(location.search).get('seed') === '1') { seedDemo(); }
+// ?seed=1&plan=1 lands on the planner with the demo squad already planned
+if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
+  s.match.status = 'setup';
+  s.route = 'plan';
+}
 render();
 setInterval(tick, 250);
 

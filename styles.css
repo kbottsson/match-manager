@@ -21,6 +21,7 @@ input,select{font:inherit;color:inherit}
 
 .app{max-width:480px;margin:0 auto;height:100dvh;display:flex;flex-direction:column;background:var(--bg);position:relative;overflow:hidden}
 .view{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column}
+.view > *{flex:none}
 .pad{padding:0 14px}
 
 /* ---------- header ---------- */
@@ -115,7 +116,27 @@ header{padding:10px 16px 9px;border-bottom:1px solid var(--line2);flex:none}
 .pact .i{width:24px;text-align:center;color:var(--ink2)}
 .pact:active{background:#f6f3ee}
 
-/* ---------- plan ---------- */
+/* ---------- plan: period tables, positions as rows ---------- */
+.ptable{margin:4px 8px 0;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.ptable table{width:100%;border-collapse:collapse;table-layout:fixed}
+.ptable th{font:700 9px/1 var(--num);letter-spacing:.03em;color:var(--ink3);
+  padding:7px 2px;background:#f6f3ee;border-bottom:1px solid var(--line);text-align:center}
+.ptable th:first-child{width:44px;text-align:left;padding-left:8px}
+.ptable td{text-align:center;border-bottom:1px solid var(--line2);padding:0}
+.ptable tr:last-child td{border-bottom:0}
+.ptable td.lbl{font:700 9px/1 var(--num);color:var(--ink3);text-align:left;padding:0 0 0 8px;letter-spacing:.02em}
+.ptable td.cell{font-size:12px;font-weight:600;height:38px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;border-left:1px solid var(--line2);padding:0 3px}
+.ptable td.cell.empty{color:#c8c1b4;font-weight:500}
+.ptable td.cell.gk{color:var(--green);background:var(--green-soft)}
+.ptable td.cell:active{background:#eae5dc}
+.ptable tr.bench td.cell{height:auto;min-height:34px;padding:5px 4px;font-size:9.5px;font-weight:500;
+  color:var(--ink3);line-height:1.3;background:#fcfbf8;white-space:normal}
+.ptable tr.bench td.lbl{color:#a49b8c;background:#fcfbf8;font-size:8px;letter-spacing:.06em}
+.phead2{display:flex;align-items:baseline;gap:7px;padding:14px 10px 2px;
+  font:700 9.5px/1 var(--num);letter-spacing:.12em;color:var(--ink3)}
+.phead2 span{font-weight:500;letter-spacing:.04em;opacity:.8}
+
 .planhead{display:flex;justify-content:space-between;align-items:center;padding:11px 14px 7px;gap:8px}
 .planhead .t{font-size:13px;font-weight:700}
 .planhead .s{font-size:11px;color:var(--ink3);margin-top:2px}

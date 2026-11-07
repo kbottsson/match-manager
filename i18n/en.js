@@ -101,6 +101,8 @@ export default {
   noMatch: 'No match yet', inProgress: 'In progress',
   positionPrefs: 'Preferred positions', optional: 'optional',
   deletePlayer: 'Remove', confirmDelete: 'Delete this match and its log?',
+  benchShort: 'BENCH', autoFill: 'Auto-fill',
+  tapEmptyCell: 'Tap a cell to place a player. The bench row shows who is sitting out that block.',
 
   pos: {
     G: { code: 'G', name: 'Goalie' },

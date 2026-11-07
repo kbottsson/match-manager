@@ -91,6 +91,8 @@ export default {
   noMatch: 'Ingen match än', inProgress: 'Pågår',
   positionPrefs: 'Föredragna positioner', optional: 'valfritt',
   deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?',
+  benchShort: 'BÄNK', autoFill: 'Fyll automatiskt',
+  tapEmptyCell: 'Tryck på en ruta för att sätta en spelare. Bänkraden visar vilka som vilar i det blocket.',
 
   pos: {
     G: { code: 'MÅL', name: 'Målvakt' },
