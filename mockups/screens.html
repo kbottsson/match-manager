@@ -156,6 +156,23 @@
   .btn.wide.primary{background:var(--green);color:#fff;border-color:var(--green)}
   .note{margin:9px 14px 0;font-size:10.5px;line-height:1.45;color:var(--ink3)}
 
+  /* ---------- goal capture ---------- */
+  .sheet .q{margin:16px 0 0;font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+  .sheet .qsub{margin-top:3px;font-size:11.5px;color:var(--ink3)}
+  .goalgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px}
+  .gbtn{height:54px;border-radius:11px;background:#f6f3ee;border:1px solid var(--line);
+    display:flex;align-items:center;gap:7px;padding:0 11px;font-size:15px;font-weight:600;text-align:left}
+  .gbtn .sl{font:700 9.5px/1 var(--num);color:var(--ink3);width:22px;flex:none}
+  .gbtn .no{font:500 11px/1 var(--num);color:var(--ink3);margin-left:auto}
+  .picked{display:flex;align-items:center;gap:8px;margin-top:11px;padding:12px 13px;border-radius:11px;
+    background:var(--green-soft);color:var(--green);font-weight:700;font-size:15px}
+  .picked .ball{font-size:16px}
+  .picked .chg{margin-left:auto;font:600 10px/1 var(--num);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+  .noassist{width:100%;height:56px;margin-top:10px;border:0;border-radius:12px;background:var(--ink);
+    color:#fff;font:700 14.5px/1 -apple-system,sans-serif;letter-spacing:.01em}
+  .noassist span{opacity:.55;font-weight:500;margin-left:6px}
+
+
 
 /* ==MORE_CSS== */
 </style>
@@ -219,7 +236,10 @@ const T = {
       readsub:'Goals, subs and minutes stream in live.',
       takeover:'Take over recording',plan:'Plan',blocklen:'7 min',
       goals:'Goals',minutes:'Minutes',sum:'Σ MIN 420.0 = 7 × 60',spread:'spread 4.0',
-      next:'Next block',forp:'for'},
+      next:'Next block',forp:'for',
+      whoscored:'Who scored?',assistq:'Assist?',change:'change',
+      tapassist:'Tap a teammate, or save without one',
+      noassist:'No assist — save goal'},
   sv:{coach:'Tränare',view:'Vy',onfield:'På plan',bench:'Avbytare',min:'Min',
       stop:'Stopp',goal:'Mål',sub:'Byte',subst:'Byte',confirm:'Bekräfta',
       changepos:'Byt position',out:'Ut',in:'In',planned:'planerad denna period',
@@ -229,7 +249,10 @@ const T = {
       readsub:'Mål, byten och speltid uppdateras direkt.',
       takeover:'Ta över registreringen',plan:'Plan',blocklen:'7 min',
       goals:'Mål',minutes:'Speltid',sum:'Σ SPELTID 420,0 = 7 × 60',spread:'spridning 4,0',
-      next:'Nästa block',forp:'för'},
+      next:'Nästa block',forp:'för',
+      whoscored:'Vem gjorde mål?',assistq:'Assist?',change:'ändra',
+      tapassist:'Tryck på en lagkamrat, eller spara utan',
+      noassist:'Ingen assist – spara mål'},
 };
 const SLOT_ORDER = ['G','LB','RB','LM','MM','RM','F'];
 
@@ -326,6 +349,46 @@ function subScreen(lang){
     </div>`;
 }
 
+const SHOT_ORDER = ['F', 'RM', 'MM', 'LM', 'RB', 'LB', 'G'];
+
+function scorerButtons(lang, excludeId){
+  const L = SLOT_LABEL[lang];
+  return SHOT_ORDER
+    .map(s => ON_FIELD.find(f => f[0] === s))
+    .filter(f => f && f[1] !== excludeId)
+    .map(([slot, id]) => `
+      <button class="gbtn"><span class="sl">${L[slot]}</span>${NAME[id].name}
+        <span class="no">${NAME[id].no}</span></button>`).join('');
+}
+
+function goalScreen(lang){
+  const t = T[lang];
+  return header(lang,'coach') + liveBody(lang) + actions(lang) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.goal}<span class="when">P2 · 07:12</span></h2>
+      <div class="q">${t.whoscored}</div>
+      <div class="goalgrid">${scorerButtons(lang)}</div>
+    </div>`;
+}
+
+function assistScreen(lang){
+  const t = T[lang];
+  return header(lang,'coach') + liveBody(lang) + actions(lang) + `
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <h2>${t.goal}<span class="when">P2 · 07:12</span></h2>
+      <div class="picked"><span class="ball">⚽</span>Ville<span class="no">11</span>
+        <span class="chg">${t.change}</span></div>
+      <div class="q">${t.assistq}</div>
+      <div class="qsub">${t.tapassist}</div>
+      <div class="goalgrid">${scorerButtons(lang, 'ville')}</div>
+      <button class="noassist">${t.noassist}<span>→</span></button>
+    </div>`;
+}
+
 function planScreen(lang){
   const t = T[lang], L = SLOT_LABEL[lang];
   const head = `<tr><th></th>${SLOT_ORDER.map(s => `<th>${L[s]}</th>`).join('')}</tr>`;
@@ -379,9 +442,11 @@ const SCREENS = {
   live:      {n:1, label:'LIVE — COACH MODE', html:liveScreen},
   plan:      {n:2, label:'PLAN — PRE-MATCH', html:planScreen},
   sub:       {n:3, label:'SUBSTITUTION SHEET', html:subScreen},
-  recap:     {n:4, label:'RECAP — FULL TIME', html:recapScreen},
-  view:      {n:5, label:'READ-ONLY', html:viewScreen},
-  'live-sv': {n:6, label:'LIVE — SVENSKA', html:liveScreen},
+  goal:      {n:4, label:'GOAL — WHO SCORED', html:goalScreen},
+  assist:    {n:5, label:'GOAL — ASSIST', html:assistScreen},
+  recap:     {n:6, label:'RECAP — FULL TIME', html:recapScreen},
+  view:      {n:7, label:'READ-ONLY', html:viewScreen},
+  'live-sv': {n:8, label:'LIVE — SVENSKA', html:liveScreen},
 };
 
 const params = new URLSearchParams(location.search);
