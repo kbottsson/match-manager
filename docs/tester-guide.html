@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Match Manager — quick start</title>
+<style>
+  @page { size: A4; margin: 12mm 13mm 10mm; }
+  * { box-sizing: border-box; }
+  body { font: 9.7pt/1.34 -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+         color: #1d211f; margin: 0; }
+  h1 { font-size: 17.5pt; letter-spacing: -.02em; margin: 0 0 1.2mm; }
+  .lede { color: #5c6560; margin: 0 0 2.4mm; }
+  .url { display: inline-block; font: 600 9.6pt/1 ui-monospace, Menlo, monospace;
+         background: #eef3ec; border: 1px solid #d7e2d4; color: #20573a;
+         padding: 1.8mm 2.6mm; border-radius: 1.6mm; margin: 0 0 2.4mm; }
+  h2 { font-size: 10.6pt; margin: 3.4mm 0 1.2mm; letter-spacing: -.01em; }
+  h2 span { display: inline-block; width: 4.8mm; height: 4.8mm; line-height: 4.8mm;
+            text-align: center; background: #20573a; color: #fff; border-radius: 50%;
+            font-size: 8pt; margin-right: 1.8mm; vertical-align: 1px; }
+  p { margin: 0 0 1.3mm; }
+  ul, ol { margin: 0 0 1.3mm; padding-left: 4.6mm; }
+  li { margin: 0 0 .8mm; }
+  .note { background: #faf8f3; border: 1px solid #e7e1d3; border-radius: 2mm;
+          padding: 2.4mm 2.8mm; margin: 2.6mm 0 0; }
+  .note > b { display: block; font-size: 8.4pt; letter-spacing: .06em; text-transform: uppercase;
+            color: #8a8172; margin-bottom: 1mm; }
+  .cols { display: flex; gap: 4mm; }
+  .cols > div { flex: 1; }
+  .cols p, .cols li { margin-bottom: .7mm; }
+  .nw { white-space: nowrap; }
+  .note p b, .note li b { display: inline; font-size: inherit;
+    letter-spacing: 0; text-transform: none; margin: 0; }
+  kbd { font: 600 8.8pt/1 ui-monospace, Menlo, monospace; background: #fff;
+        border: 1px solid #cfd4cf; border-bottom-width: 2px; border-radius: 1mm;
+        padding: .4mm 1mm; }
+  footer { margin-top: 2.6mm; color: #8a8172; font-size: 8.4pt; }
+</style></head>
+<body>
+
+<h1>Match Manager</h1>
+<p class="lede">A small app for running a 7-a-side match: playing time, substitutions,
+goals and assists. Made for a phone on the touchline — big buttons, works with no signal.</p>
+<div class="url">kbottsson.github.io/match-manager</div>
+
+<p>No account, no cost, no app store. It's an early build, so expect rough edges — that's
+what I want your eyes on.</p>
+
+<h2><span>1</span>Put it on your home screen</h2>
+<p>Open the link in <b>Safari</b> → <b>Share</b> → <b>Add to Home Screen</b>. Then it opens
+full-screen, works offline, and keeps its data — Safari clears stored data for sites you
+don't visit for a week.</p>
+
+<h2><span>2</span>Add your players — once</h2>
+<p><b>Roster</b> tab → first name and shirt number for each kid. First names only.
+Everything stays on your phone: nothing is uploaded and I can't see it.</p>
+
+<h2><span>3</span>Make a team</h2>
+<p><b>Teams</b> tab → <b>+ New team</b> → name it (e.g. "P16 A") → tap the players you want
+→ <b>Save</b>. Roster is "everyone in the club"; a team is "the group that plays together".
+You can have several, and edit them any time.</p>
+
+<h2><span>4</span>Plan a match</h2>
+<p><b>Match</b> tab → <b>+ Plan another match</b> → opponent, date, which team. Then fill the
+grid: tap a cell and pick a player. A period is three blocks of 7 / 7 / 6 minutes, so two
+substitutions per period. The bench row under each period shows who sits out; the forecast
+at the bottom shows everyone's minutes. Can't make it? Untick them under <i>"Who is here
+today"</i> — their cells empty and they drop off the bench.</p>
+
+<h2><span>5</span>On match day</h2>
+<ul>
+  <li><b>Start period 1</b> on the whistle; <b>Stop / Start</b> if play stops.</li>
+  <li><b>⚽</b> on a row = goal, then pick the assist (or <i>No assist</i>).</li>
+  <li><b>⇄</b> on a row = substitution: from a player on the pitch it asks who comes on;
+      from the bench it asks who comes off. Two taps either way.</li>
+  <li>Tap a player's <b>name</b> to change position, sub off, or edit minutes.</li>
+  <li>The <b>period chip</b> at the top holds <i>End period</i> and <i>End match</i>; the
+      <b>‹</b> top-left goes home mid-match, clock still running.</li>
+</ul>
+
+<div class="cols">
+  <div class="note"><b>Good to know</b>
+    <p>Minutes include time in goal — one number per player.</p>
+    <p>Every action can be undone: a toast appears for a few seconds, and there's a
+    <kbd>⟲</kbd> in the bottom bar.</p>
+    <p>Nothing syncs yet — what you record stays on your phone.</p>
+  </div>
+  <div class="note"><b>Known gaps</b>
+    <p>One coach only; no shared read-only view for a second phone.</p>
+    <p>No hand-editing of minutes, no season totals.</p>
+    <p>No availability calendar — you mark absences per match.</p>
+  </div>
+</div>
+
+<div class="note"><b>What I'd like to hear</b>
+  <ol style="margin-bottom:1mm">
+    <li>Could you run a whole match end to end without getting stuck?</li>
+    <li>Is the plan grid readable on your phone, or too much scrolling?</li>
+    <li>Are the ⚽ / ⇄ buttons too easy to hit by mistake?</li>
+    <li>Anything you expected to find and couldn't?</li>
+  </ol>
+  <p style="margin:0">Screenshots beat descriptions, and please say what you were doing at
+  the time. To poke around without entering real names, add <b class="nw">?seed=1</b> to the link and
+  it opens on a fake match in progress.</p>
+</div>
+
+<footer>Thanks — even "this bit confused me" is useful at this stage.</footer>
+</body></html>
