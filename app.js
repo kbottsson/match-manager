@@ -153,6 +153,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 function routeNow() {
   if (!s.team || !s.team.players?.length) return 'setup';
   if (!s.match) return 'setup';
+  if (s.route === 'home') return 'setup';
   if (s.match.status === 'live') return 'live';
   if (s.match.status === 'final') return s.route === 'setup' ? 'setup' : 'recap';
   return s.route === 'plan' ? 'plan' : 'setup';
@@ -185,8 +186,9 @@ function headerLive(p, showScore = true) {
     : `<span class="chip coach dot">${T('coach')}</span>`;
   return `<header>
     <div class="toprow">
+      <button class="back" data-act="home" aria-label="${T('home')}">‹</button>
       ${stateChip}
-      <span class="chip period">${T('periodN', { n: p.period })}</span>
+      <button class="chip period" data-act="periodsheet">${T('periodN', { n: p.period })}<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
       <span class="grow"></span>
       <span>${esc(s.match?.opponent || s.team.name)}</span>
     </div>
@@ -234,7 +236,7 @@ function matchCard() {
       ${live ? `<div style="font:700 15px/1 var(--num);margin-top:10px">${p.score.for}–${p.score.against} · ${T('periodN', { n: p.period })}</div>` : ''}
       <div style="display:flex;gap:7px;margin-top:12px">
         ${live
-          ? `<button class="btn primary" data-act="resume">${T('start')}</button>`
+          ? `<button class="btn primary" data-act="resume">${T('resume')}</button>`
           : `<button class="btn wide" data-act="nav:plan">${T('openPlan')}</button>
              <button class="btn primary" data-act="startmatch">${T('startMatch')}</button>`}
       </div>
@@ -477,7 +479,7 @@ function renderSheet() {
   const sh = s.sheet;
   const when = `<span class="when">${T('periodN', { n: p.period })} · ${mmss(p.clockMs)}</span>`;
   const onIds = Object.values(p.onField).filter(Boolean);
-  const close = `<button class="noassist" data-act="sheet:close">${T('cancel')}</button>`;
+  const close = `<button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>`;
 
   if (sh.kind === 'assist') {
     const others = onIds.filter((id) => id !== sh.playerId);
@@ -569,6 +571,21 @@ function renderSheet() {
           ${taken.has(id) ? '<span class="no" style="margin-left:6px">●</span>' : ''}
         </button>`).join('')}</div>
       <button class="noassist" data-act="setcell:none">—</button>
+    </div>`;
+  }
+
+  if (sh.kind === 'period') {
+    const last = p.period >= config().periodCount;
+    const running = p.state === 'running' || p.state === 'paused';
+    return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
+      <div class="grab"></div><h2>${T('periodN', { n: p.period })}<span class="when">${T('period')} ${p.period}/${config().periodCount}</span></h2>
+      <div class="q">${mmss(p.clockMs)} <span style="color:var(--ink3);font-weight:500">/ ${config().periodMinutes}:00</span></div>
+      <div class="pacts">
+        ${running ? `<button class="pact" data-act="endperiod"><span class="i">⏹</span>${T('endPeriod')}</button>` : ''}
+        <button class="pact" data-act="clockadjust"><span class="i">🕐</span>${T('adjustClock')}</button>
+        ${last ? `<button class="pact" data-act="finalize"><span class="i">🏁</span>${T('fullTime')}</button>` : ''}
+      </div>
+      ${close}
     </div>`;
   }
 
@@ -771,6 +788,14 @@ function handle(ev) {
     case 'tab': s.tab = a; render(); return;
     case 'lang': switchLang(); return;
     case 'nav': s.route = a === 'plan' ? 'plan' : null; render(); return;
+    case 'home': s.route = 'home'; s.tab = 'match'; s.sheet = null; render(); return;
+    case 'resume': s.route = 'live'; s.sheet = null; render(); return;
+    case 'periodsheet': s.sheet = { kind: 'period' }; render(); return;
+    case 'clockadjust': s.sheet = { kind: 'clock' }; render(); return;
+    case 'endperiod': {
+      act('period_end', { period: p.period });
+      s.sheet = null; render(); return;
+    }
     case 'done': s.route = 'setup'; s.sheet = null; render(); return;
     case 'sheet': s.sheet = null; render(); return;
 
@@ -961,9 +986,9 @@ function seedDemo() {
 
 boot();
 ensureTeam();
+if (new URLSearchParams(location.search).get('seed') === '1') { seedDemo(); }
 // First run: land where the work is, not on an empty tab.
 if (!s.team.players.length) s.tab = 'squad';
-if (new URLSearchParams(location.search).get('seed') === '1') { seedDemo(); }
 // ?seed=1&plan=1 lands on the planner with the demo squad already planned
 if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
   s.match.status = 'setup';

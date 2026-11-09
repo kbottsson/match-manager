@@ -92,6 +92,7 @@ export default {
   positionPrefs: 'Föredragna positioner', optional: 'valfritt',
   deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?',
   benchShort: 'BÄNK', autoFill: 'Fyll automatiskt',
+  home: 'Hem', resume: 'Fortsätt',
   tapEmptyCell: 'Tryck på en ruta för att sätta en spelare. Bänkraden visar vilka som vilar i det blocket.',
 
   pos: {

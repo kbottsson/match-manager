@@ -144,6 +144,33 @@ async function main() {
   ok('clock frozen after stop', clockBefore !== '' && clockAfter !== '', `${clockBefore} → ${clockAfter}`);
   ok('start button appears when paused', await evaluate("!!document.querySelector('[data-act=\"clock:start\"]')"));
 
+  console.log('home and back');
+  await click('[data-act="home"]');
+  await sleep(200);
+  ok('home screen shown with match in progress', /in progress/i.test(await text('body')));
+  ok('resume button present', await evaluate("!!document.querySelector('[data-act=\"resume\"]')"));
+  await click('[data-act="resume"]');
+  await sleep(200);
+  ok('back on the live screen', await evaluate("!!document.querySelector('[data-act=\"periodsheet\"]')"));
+
+  console.log('period change');
+  const periodBefore = parseInt((await text('[data-act="periodsheet"]')).match(/\d+/)[0], 10);
+  await click('[data-act="periodsheet"]');
+  await sleep(150);
+  ok('period sheet opened', await evaluate("!!document.querySelector('[data-act=\"endperiod\"]')"));
+  await click('[data-act="endperiod"]');
+  await sleep(200);
+  ok('end period returns the start control',
+    await evaluate("!!document.querySelector('[data-act=\"clock:start\"]')"));
+  const barText = (await text('.actions')).replace(/\s+/g, ' ');
+  ok(`next period offered (${periodBefore + 1})`, barText.includes(String(periodBefore + 1)), barText);
+  await click('[data-act="clock:start"]');
+  await sleep(400);
+  const clock2 = (await text('[data-clock]')).trim();
+  ok('new period clock restarted near zero', /^00:0/.test(clock2), clock2);
+  const periodAfter = parseInt((await text('[data-act="periodsheet"]')).match(/\d+/)[0], 10);
+  ok('period advanced by exactly one', periodAfter === periodBefore + 1, `${periodBefore} → ${periodAfter}`);
+
   ws.close();
 }
 

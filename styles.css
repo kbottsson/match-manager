@@ -29,7 +29,8 @@ header{padding:10px 16px 9px;border-bottom:1px solid var(--line2);flex:none}
 .toprow{display:flex;align-items:center;gap:7px;font-size:10.5px;letter-spacing:.09em;
   text-transform:uppercase;color:var(--ink3);font-weight:600;min-height:20px}
 .toprow .grow{flex:1}
-.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;font-size:9.5px;letter-spacing:.07em}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:999px;font-size:9.5px;
+  letter-spacing:.07em;white-space:nowrap;flex:none;max-width:100%}
 .chip.coach{background:var(--green);color:#fff}
 .chip.view{background:#e6e3dc;color:var(--ink2)}
 .chip.period{background:#efebe3;color:var(--ink2)}
@@ -57,6 +58,9 @@ header{padding:10px 16px 9px;border-bottom:1px solid var(--line2);flex:none}
 .nm{flex:1;font-size:15.5px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;text-align:left;min-width:0}
 .toprow span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46%}
+.back{width:26px;height:24px;margin-left:-5px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;line-height:1;color:var(--ink2)}
+.back:active{color:var(--ink)}
 .nm .no{font:500 10.5px/1 var(--num);color:var(--ink3);margin-left:5px}
 .min{font:600 16.5px/1 var(--num);font-variant-numeric:tabular-nums;width:46px;text-align:right}
 .rbtn{width:var(--tap);height:var(--tap);flex:none;border-radius:11px;border:1px solid #d8d2c6;background:#fff;
@@ -109,6 +113,9 @@ header{padding:10px 16px 9px;border-bottom:1px solid var(--line2);flex:none}
 .picked.off{background:var(--red-soft);color:var(--red)}
 .picked .chg{margin-left:auto;font:600 9.5px/1 var(--num);letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
 .noassist{width:100%;min-height:54px;margin-top:9px;border-radius:12px;background:var(--ink);color:#fff;font-weight:700;font-size:14px}
+.sheetclose{width:100%;min-height:52px;margin-top:9px;border-radius:12px;background:#fff;
+  border:1.5px solid #cfc9bd;color:var(--ink2);font-weight:600;font-size:14px}
+.sheetclose:active{background:#f6f3ee}
 .pacts{margin-top:9px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .pact{display:flex;align-items:center;gap:11px;min-height:54px;padding:0 13px;font-size:15px;font-weight:600;
   border-bottom:1px solid var(--line2);background:#fff;width:100%;text-align:left}
