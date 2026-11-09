@@ -96,6 +96,8 @@ export default {
   upcoming: 'Kommande', planAnother: 'Planera ännu en match', notStarted: 'Ej startad',
   endMatch: 'Avsluta match', confirmEnd: 'Avsluta matchen nu? Klockan stannar och matchen stängs.',
   noUpcoming: 'Inga matcher planerade.',
+  squadTitle: 'Vilka är med idag', squadOf: '{n} av {total}', saved: 'Sparat',
+  rosterEmpty: 'Lägg upp barnen här en gång – välj sedan vilka som spelar varje match.',
   tapEmptyCell: 'Tryck på en ruta för att sätta en spelare. Bänkraden visar vilka som vilar i det blocket.',
 
   pos: {

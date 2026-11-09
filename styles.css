@@ -192,6 +192,12 @@ table.grid td:active{background:#eae5dc}
 .tog{padding:9px 11px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600}
 .tog.on{background:var(--green);border-color:var(--green);color:#fff}
 .tog.off{background:#f1ede5;color:#a9a196;text-decoration:line-through}
+.squadbar{padding:8px 0 2px}
+.squadhead{display:flex;justify-content:space-between;align-items:baseline;padding:6px 10px 6px;
+  font:700 9.5px/1 var(--num);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
+.squadhead span:last-child{letter-spacing:.04em;font-weight:600;opacity:.85}
+.chiprow{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px 4px}
+.chiprow .tog{font-size:12.5px;padding:7px 10px}
 .muted{color:var(--ink3);font-size:12px;line-height:1.5}
 .empty{padding:36px 22px;text-align:center;color:var(--ink3);font-size:13.5px;line-height:1.6}
 .tabs{display:flex;gap:6px;padding:10px 14px 0}

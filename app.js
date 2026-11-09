@@ -168,8 +168,11 @@ function routeNow() {
 
 function render() {
   const app = document.getElementById('app');
+  // NOTE: do not write the derived route back into s.route. s.route is the
+  // user's *requested* route (home / plan / live); overwriting it with the
+  // resolved one made "home" last exactly one render, so the next tap bounced
+  // straight back into the live match.
   const route = routeNow();
-  s.route = route;
 
   if (route === 'live') app.innerHTML = viewLive();
   else if (route === 'plan') app.innerHTML = viewPlan();
@@ -310,14 +313,14 @@ function newMatchForm(onlyOption = false) {
 }
 
 function squadCard() {
-  const players = s.team?.players || [];
+  const players = roster();
   const rows = players.length
     ? players.map((p) => `<div class="matchrow">
         <span style="font:600 12px/1 var(--num);color:var(--ink3);width:26px">${esc(p.no || '')}</span>
         <span class="opp">${esc(p.name)}</span>
         <button class="chip period" data-act="delplayer:${p.id}">${T('deletePlayer')}</button>
       </div>`).join('')
-    : `<div class="muted">${T('squadEmpty')}</div>`;
+    : `<div class="muted">${T('rosterEmpty')}</div>`;
 
   return `<div class="card">
       <h3>${T('tabSquad')}</h3>
@@ -363,7 +366,8 @@ function historyCard() {
 function viewPlan() {
   const c = config();
   const blocks = blockLayout(c);
-  const f = planForecast(s.plan, c, s.team.players);
+  const pool = squad();
+  const f = planForecast(s.plan, c, pool);
   const cellAt = (bi, slot) => s.plan.find((x) => x.blockIndex === bi && x.slot === slot)?.playerId;
 
   // One table per period: positions are rows, the period's time blocks are columns.
@@ -387,7 +391,7 @@ function viewPlan() {
         <td class="lbl">${T('benchShort')}</td>
         ${list.map((b) => {
           const used = new Set(s.plan.filter((x) => x.blockIndex === b.blockIndex).map((x) => x.playerId));
-          const rest = s.team.players.filter((pl) => !used.has(pl.id));
+          const rest = pool.filter((pl) => !used.has(pl.id));
           return `<td class="cell">${rest.length ? rest.map((r) => esc(r.name)).join(', ') : '—'}</td>`;
         }).join('')}
       </tr>`;
@@ -408,14 +412,19 @@ function viewPlan() {
     ? T('emptySlot', { block: err.blockIndex + 1, slot: err.missing?.map(P).join(', ') })
     : T('doubleBooked', { block: (err.blockIndex ?? 0) + 1, name: player(err.playerId).name })}</div>` : '';
 
+  const squadBar = `<div class="squadbar">
+      <div class="squadhead"><span>${T('squadTitle')}</span>
+        <span>${T('squadOf', { n: pool.length, total: roster().length })}</span></div>
+      <div class="chiprow">${roster().map((pl) => `<button
+          class="tog ${inSquad(pl.id) ? 'on' : 'off'}" data-act="togplayer:${pl.id}">${esc(pl.name)}</button>`).join('')}</div>
+    </div>`;
+
   return headerPlain(`${T('plan')} · ${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes}`,
     s.match?.opponent || '',
-    `<div style="display:flex;gap:5px">
-       <button class="chip period" data-act="deletematch" aria-label="${T('deleteMatch')}">🗑</button>
-       <button class="chip period" data-act="nav:setup">${T('cancel')}</button>
-     </div>`)
+    `<button class="chip period" data-act="saveplan">${T('save')}</button>`)
     + `<div class="view">
       ${errHtml}
+      ${squadBar}
       ${tables.join('')}
       <div class="fc">
         <div class="hd"><span>${T('forecast')}</span><span>${T('min')} · ${P('G')}</span></div>
@@ -424,6 +433,10 @@ function viewPlan() {
           <span>${T('spread')} ${fmtMin(f.spreadMs)}</span></div>
       </div>
       <div class="note">${T('tapEmptyCell')}</div>
+      <div style="padding:0 12px 22px">
+        <button style="color:var(--red);font-size:12px;text-decoration:underline;padding:8px 0"
+          data-act="deletematch">${T('deleteMatch')}</button>
+      </div>
     </div>
     <div class="actions">
       <button class="btn wide" data-act="autoplan">${T('autoFill')}</button>
@@ -459,7 +472,7 @@ function viewLive() {
   const p = proj();
   const c = config();
   const on = onFieldList(p).map((x) => playerRow(p, x));
-  const bench = benchList(p, s.team.players).map((x) =>
+  const bench = benchList(p, squad()).map((x) =>
     playerRow(p, { slot: null, playerId: x.id, minMs: x.minMs }, true));
 
   return headerLive(p)
@@ -542,7 +555,7 @@ function renderSheet() {
     const pl = player(sh.playerId);
     const slot = slotOfPlayer(p, sh.playerId);
     const list = isOut
-      ? benchList(p, s.team.players).map((x) => ({ slot: null, id: x.id, right: fmtMin(x.minMs) }))
+      ? benchList(p, squad()).map((x) => ({ slot: null, id: x.id, right: fmtMin(x.minMs) }))
       : onIds.map((id) => ({ slot: slotOfPlayer(p, id), id, right: fmtMin(p.players[id]?.playMs || 0) }));
     return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
       <div class="grab"></div><h2>${T('sub')}${when}</h2>
@@ -599,7 +612,7 @@ function renderSheet() {
 
   if (sh.kind === 'cell') {
     const taken = new Set(s.plan.filter((x) => x.blockIndex === sh.blockIndex).map((x) => x.playerId));
-    const items = s.team.players.map((pl) => ({
+    const items = squad().map((pl) => ({
       slot: null, id: pl.id, right: esc(pl.no), cur: false,
     }));
     return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
@@ -766,6 +779,34 @@ function saveTeamForm(form) {
   render();
 }
 
+/** The master list of kids, added once. */
+function roster() {
+  return s.team?.players || [];
+}
+
+/** Who is available for THIS match: the roster minus today's absences. */
+function inSquad(id) {
+  return !(s.match?.unavailable || []).includes(id);
+}
+
+function squad() {
+  return roster().filter((p) => inSquad(p.id));
+}
+
+/** Plan cells and availability must not reference a kid who left the roster. */
+function purgePlayer(id) {
+  s.team.players = roster().filter((p) => p.id !== id);
+  store.saveTeam(s.team);
+  if (s.match) {
+    if (Array.isArray(s.match.unavailable)) {
+      s.match.unavailable = s.match.unavailable.filter((x) => x !== id);
+    }
+    s.plan = s.plan.filter((c) => c.playerId !== id);
+    store.savePlan(s.match.id, s.plan);
+    saveMatch();
+  }
+}
+
 function ensureTeam() {
   if (!s.team) s.team = { id: uid(), name: '', players: [] };
   if (!s.team.players) s.team.players = [];
@@ -775,7 +816,7 @@ function ensureTeam() {
 function autoPlan() {
   const c = config();
   const blocks = blockLayout(c);
-  const players = s.team.players;
+  const players = squad();
   if (!players.length) return;
   const keeper = players.find((p) => (p.pref || '').includes('G')) || players[0];
   const outfield = players.filter((p) => p.id !== keeper.id);
@@ -797,6 +838,10 @@ function autoPlan() {
 
 function startMatch() {
   if (!s.match) return;
+  if (squad().length < SLOTS.length) {
+    showToast(`⚠ ${T('squadOf', { n: squad().length, total: roster().length })}`, null);
+    return;
+  }
   if (!s.plan.length) autoPlan();
   const first = blockLayout(config())[0];
   const assignments = {};
@@ -854,10 +899,25 @@ function handle(ev) {
     case 'creatematch': if (form) createMatch(form); return;
     case 'addplayer': if (form) addPlayer(form); return;
     case 'saveteam': if (form) saveTeamForm(form); return;
-    case 'delplayer': {
-      s.team.players = s.team.players.filter((x) => x.id !== a);
-      store.saveTeam(s.team); render(); return;
+    case 'saveplan': {
+      saveMatch();
+      s.route = null;
+      showToast(`✓ ${T('saved')}`, null);
+      return;
     }
+    case 'togplayer': {
+      const list = Array.isArray(s.match.unavailable) ? s.match.unavailable : [];
+      const nowOut = !list.includes(a);
+      s.match.unavailable = nowOut ? [...list, a] : list.filter((x) => x !== a);
+      if (nowOut) {
+        // A kid who is not here cannot be in the plan.
+        s.plan = s.plan.filter((c) => c.playerId !== a);
+        store.savePlan(s.match.id, s.plan);
+      }
+      saveMatch();
+      render(); return;
+    }
+    case 'delplayer': purgePlayer(a); render(); return;
     case 'deletematch': {
       if (!confirm(T('confirmDelete'))) return;
       store.deleteMatch(s.match.id);

@@ -152,6 +152,18 @@ async function main() {
   await click('[data-act="resume"]');
   await sleep(200);
   ok('back on the live screen', await evaluate("!!document.querySelector('[data-act=\"periodsheet\"]')"));
+  ok('tab switching from home stays on the roster, not back in the match', await (async () => {
+    await click('[data-act="home"]');
+    await sleep(200);
+    await click('[data-act="tab:squad"]');
+    await sleep(250);
+    const onRoster = await evaluate("!!document.querySelector('.tabs') && !!document.querySelector('#playerform')");
+    await click('[data-act="tab:match"]');
+    await sleep(200);
+    await click('[data-act="resume"]');
+    await sleep(200);
+    return onRoster;
+  })());
 
   console.log('period change');
   const periodBefore = parseInt((await text('[data-act="periodsheet"]')).match(/\d+/)[0], 10);
@@ -197,8 +209,25 @@ async function main() {
   await click('[data-act="creatematch"]');
   await sleep(350);
   ok('planner opened for the new match', await evaluate("!!document.querySelector('.ptable')"));
-  await click('[data-act="nav:setup"]');
+  ok('plan header offers Save, not Cancel',
+    await evaluate("!!document.querySelector('[data-act=\"saveplan\"]') && !document.querySelector('header [data-act=\"deletematch\"]')"));
+  ok('squad row lists the roster', (await evaluate("document.querySelectorAll('.chiprow .tog').length")) >= 9);
+
+  await click('[data-act="autoplan"]');
+  await sleep(350);
+  const filled = await evaluate("document.querySelectorAll('.ptable tr:not(.bench) td.cell:not(.empty)').length");
+  ok('auto-fill filled every slot', filled === 63, String(filled));
+
+  await evaluate("document.querySelectorAll('.chiprow .tog')[0].click()");
   await sleep(250);
+  ok('unticking a player updates the squad count',
+    /8 of 9/i.test(await text('.squadhead')), await text('.squadhead'));
+  const filledAfter = await evaluate("document.querySelectorAll('.ptable tr:not(.bench) td.cell:not(.empty)').length");
+  ok('their plan cells were cleared', filledAfter < filled, `${filled} → ${filledAfter}`);
+
+  await click('[data-act="saveplan"]');
+  await sleep(300);
+  ok('Save returns home and confirms', /saved/i.test(await text('body')));
   ok('new match listed under Upcoming', (await text('body')).includes('Högaborgs BK'));
   ok('"plan another" offered alongside it',
     await evaluate("!!document.querySelector('[data-act=\"newmatch\"]')"));
