@@ -362,7 +362,7 @@ function newMatchForm(onlyOption = false) {
       <div class="field"><label>${T('opponent')}</label>
         <input name="opponent" required placeholder="Lunds BK" autocomplete="off"></div>
       <div class="field"><label>${T('kickoff')} <span style="color:var(--ink3);font-weight:400">(${T('optional')})</span></label>
-        <input name="kickoff" type="date"></div>
+        <div class="dtwrap"><input name="kickoff" type="date"></div></div>
       <div class="rowline">
         <div class="field"><label>${T('periods')}</label>
           <input name="periods" type="number" min="1" max="6" value="3" inputmode="numeric"></div>

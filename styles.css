@@ -180,11 +180,25 @@ table.grid td:active{background:#eae5dc}
 .setup{padding:14px 14px 20px;display:flex;flex-direction:column;gap:14px}
 .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px}
 .card h3{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);font-weight:700;margin-bottom:10px}
-.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;min-width:0}
 .field:last-child{margin-bottom:0}
 .field label{font-size:11px;color:var(--ink3);font-weight:600;letter-spacing:.03em}
 .field input,.field select{height:46px;border:1px solid var(--line);border-radius:10px;padding:0 11px;
-  background:#fdfcfa;font-size:15px;width:100%}
+  background:#fdfcfa;font-size:15px;width:100%;min-width:0;max-width:100%;display:block}
+/* iOS gives date inputs an intrinsic width and its own centring; without this the
+   control spills past the card edge on an iPhone. */
+.field input[type="date"]{-webkit-appearance:none;appearance:none;
+  text-align:left;font-size:15px;line-height:normal;padding-right:10px}
+.field input[type="date"]::-webkit-date-and-time-value{text-align:left;margin:0}
+.field input[type="date"]::-webkit-datetime-edit{text-align:left}
+.field input[type="date"]::-webkit-calendar-picker-indicator{margin:0;opacity:.55}
+/* Belt and braces: the wrapper owns the visible box, so a UA that insists on a
+   wider intrinsic width gets clipped to the field instead of spilling out. */
+.dtwrap{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:10px;
+  background:#fdfcfa;width:100%;max-width:100%}
+.dtwrap input[type="date"]{border:0;background:transparent;height:44px;border-radius:0;
+  width:100%;max-width:100%;min-width:0}
+.dtwrap:focus-within{outline:2px solid var(--green);outline-offset:-1px}
 .field input:focus,.field select:focus{outline:2px solid var(--green);outline-offset:-1px;border-color:var(--green)}
 .rowline{display:flex;gap:8px}
 .rowline > *{flex:1}
