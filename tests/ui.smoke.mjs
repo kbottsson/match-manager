@@ -171,6 +171,38 @@ async function main() {
   const periodAfter = parseInt((await text('[data-act="periodsheet"]')).match(/\d+/)[0], 10);
   ok('period advanced by exactly one', periodAfter === periodBefore + 1, `${periodBefore} → ${periodAfter}`);
 
+  console.log('end the match early');
+  await evaluate("window.confirm = () => true");
+  await click('[data-act="periodsheet"]');
+  await sleep(150);
+  ok('period sheet offers End match', await evaluate("!!document.querySelector('[data-act=\"finalize\"]')"));
+  await click('[data-act="finalize"]');
+  await sleep(400);
+  ok('recap shown after ending early', /final score/i.test(await text('body')));
+  ok('minutes stopped at the final whistle',
+    !(await evaluate("!!document.querySelector('[data-clock]')")));
+
+  await click('[data-act="done"]');
+  await sleep(250);
+  ok('nothing planned → the new-match form is offered directly',
+    await evaluate("!!document.querySelector('#matchform')"));
+
+  console.log('plan a match in advance');
+  await evaluate(`(() => {
+    const f = document.querySelector('#matchform');
+    f.opponent.value = 'Högaborgs BK';
+    f.kickoff.value = '2026-11-16';
+    return true;
+  })()`);
+  await click('[data-act="creatematch"]');
+  await sleep(350);
+  ok('planner opened for the new match', await evaluate("!!document.querySelector('.ptable')"));
+  await click('[data-act="nav:setup"]');
+  await sleep(250);
+  ok('new match listed under Upcoming', (await text('body')).includes('Högaborgs BK'));
+  ok('"plan another" offered alongside it',
+    await evaluate("!!document.querySelector('[data-act=\"newmatch\"]')"));
+
   ws.close();
 }
 

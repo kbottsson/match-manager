@@ -25,6 +25,7 @@ const s = {
   toast: null,
   route: null,
   tab: 'match',
+  creating: false,
 };
 
 function config() {
@@ -51,7 +52,8 @@ function boot() {
   setLang(s.lang);
   s.team = store.loadTeam();
   const matches = store.listMatches();
-  s.match = matches.find((m) => m.status !== 'final') || matches[matches.length - 1] || null;
+  // Land on the live match only; everything else is opened from the list.
+  s.match = matches.find((m) => m.status === 'live') || null;
   if (s.match) {
     s.plan = store.loadPlan(s.match.id);
     s.events = store.loadEvents(s.match.id);
@@ -152,8 +154,9 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 function routeNow() {
   if (!s.team || !s.team.players?.length) return 'setup';
-  if (!s.match) return 'setup';
+  if (s.creating) return 'setup';
   if (s.route === 'home') return 'setup';
+  if (!s.match) return 'setup';
   if (s.match.status === 'live') return 'live';
   if (s.match.status === 'final') return s.route === 'setup' ? 'setup' : 'recap';
   return s.route === 'plan' ? 'plan' : 'setup';
@@ -219,35 +222,66 @@ function viewSetup() {
   const tabs = [['match', T('tabMatch')], ['squad', T('tabSquad')], ['history', T('tabHistory')]]
     .map(([k, label]) => `<button class="tab${s.tab === k ? ' on' : ''}" data-act="tab:${k}">${label}</button>`)
     .join('');
-  const body = s.tab === 'squad' ? squadCard() : s.tab === 'history' ? historyCard() : matchCard();
+  const body = s.tab === 'squad' ? squadCard() : s.tab === 'history' ? historyCard() : matchTab();
   const lang = `<button class="chip period" data-act="lang">${T('language')}</button>`;
   return headerPlain(s.team?.name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
     + `<div class="view"><div class="tabs">${tabs}</div><div class="setup">${body}</div></div>`;
 }
 
-function matchCard() {
-  if (s.match && s.match.status !== 'final') {
-    const p = proj();
-    const live = s.match.status === 'live';
-    return `<div class="card">
+function shortDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(s.lang === 'sv' ? 'sv-SE' : 'en-GB', { day: 'numeric', month: 'short' });
+}
+
+function selectMatch(match) {
+  s.match = match;
+  s.plan = store.loadPlan(match.id);
+  s.events = store.loadEvents(match.id);
+  s.creating = false;
+  s.sheet = null;
+}
+
+/**
+ * Match tab: the live match if there is one, then everything planned ahead.
+ * Planning several matches in advance is the whole point of this list.
+ */
+function matchTab() {
+  if (!s.team.players.length) return `<div class="empty">${T('squadEmpty')}</div>`;
+
+  const all = store.listMatches();
+  const live = all.find((m) => m.status === 'live');
+  const upcoming = all
+    .filter((m) => m.status === 'setup')
+    .sort((a, b) => String(a.kickoff || '9999').localeCompare(String(b.kickoff || '9999')));
+
+  if (s.creating || (!live && !upcoming.length)) return newMatchForm(!all.length);
+
+  const liveP = live ? project(store.loadEvents(live.id), live, Date.now()) : null;
+
+  return `
+    ${live ? `<div class="card">
       <h3>${T('inProgress')}</h3>
-      <div style="font-size:16px;font-weight:700">${esc(s.match.opponent || '—')}</div>
-      <div class="muted" style="margin-top:4px">${esc(s.match.kickoff || '')} · ${config().periodCount} × ${config().periodMinutes} ${T('min')}</div>
-      ${live ? `<div style="font:700 15px/1 var(--num);margin-top:10px">${p.score.for}–${p.score.against} · ${T('periodN', { n: p.period })}</div>` : ''}
-      <div style="display:flex;gap:7px;margin-top:12px">
-        ${live
-          ? `<button class="btn primary" data-act="resume">${T('resume')}</button>`
-          : `<button class="btn wide" data-act="nav:plan">${T('openPlan')}</button>
-             <button class="btn primary" data-act="startmatch">${T('startMatch')}</button>`}
-      </div>
-      <button class="btn wide" style="margin-top:7px;color:var(--red);border-color:#e6cfcc" data-act="deletematch">${T('deleteMatch')}</button>
+      <div style="font-size:16px;font-weight:700">${esc(live.opponent || '—')}</div>
+      <div style="font:700 15px/1 var(--num);margin-top:8px">${liveP.score.for}–${liveP.score.against}
+        · ${T('periodN', { n: liveP.period })}</div>
+      <button class="btn primary" style="width:100%;margin-top:12px" data-act="resume">${T('resume')}</button>
+    </div>` : ''}
+    <div class="card">
+      <h3>${T('upcoming')}</h3>
+      ${upcoming.length
+        ? upcoming.map((m) => `<button class="matchrow" data-act="openmatch:${m.id}">
+            <span class="dt">${shortDate(m.kickoff)}</span>
+            <span class="opp">${esc(m.opponent || '—')}</span>
+            <span style="color:var(--ink3);font-size:17px;line-height:1">›</span>
+          </button>`).join('')
+        : `<div class="muted">${T('noUpcoming')}</div>`}
+      <button class="btn wide" style="margin-top:12px" data-act="newmatch">+ ${T('planAnother')}</button>
     </div>`;
-  }
+}
 
-  if (!s.team || !s.team.players?.length) {
-    return `<div class="empty">${T('squadEmpty')}</div>`;
-  }
-
+function newMatchForm(onlyOption = false) {
   return `<div class="card">
     <h3>${T('newMatch')}</h3>
     <form id="matchform">
@@ -257,9 +291,9 @@ function matchCard() {
         <input name="kickoff" type="date"></div>
       <div class="rowline">
         <div class="field"><label>${T('periods')}</label>
-          <input name="periods" type="number" min="1" max="6" value="${s.team?.periodCount || 3}" inputmode="numeric"></div>
+          <input name="periods" type="number" min="1" max="6" value="3" inputmode="numeric"></div>
         <div class="field"><label>${T('minutesEach')}</label>
-          <input name="minutes" type="number" min="5" max="45" value="${s.team?.periodMinutes || 20}" inputmode="numeric"></div>
+          <input name="minutes" type="number" min="5" max="45" value="20" inputmode="numeric"></div>
       </div>
       <div class="field"><label>${T('blockLength')}</label>
         <select name="block">
@@ -267,7 +301,10 @@ function matchCard() {
           <option value="5">${T('block5')}</option>
           <option value="10">${T('block10')}</option>
         </select></div>
-      <button class="btn primary" style="width:100%;margin-top:4px" data-act="creatematch">${T('createMatch')}</button>
+      <div class="rowline" style="margin-top:4px">
+        ${onlyOption ? '' : `<button class="btn wide" data-act="cancelnew">${T('cancel')}</button>`}
+        <button class="btn primary" data-act="creatematch">${T('createMatch')}</button>
+      </div>
     </form>
   </div>`;
 }
@@ -373,7 +410,10 @@ function viewPlan() {
 
   return headerPlain(`${T('plan')} · ${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes}`,
     s.match?.opponent || '',
-    `<button class="chip period" data-act="nav:setup">${T('cancel')}</button>`)
+    `<div style="display:flex;gap:5px">
+       <button class="chip period" data-act="deletematch" aria-label="${T('deleteMatch')}">🗑</button>
+       <button class="chip period" data-act="nav:setup">${T('cancel')}</button>
+     </div>`)
     + `<div class="view">
       ${errHtml}
       ${tables.join('')}
@@ -583,7 +623,7 @@ function renderSheet() {
       <div class="pacts">
         ${running ? `<button class="pact" data-act="endperiod"><span class="i">⏹</span>${T('endPeriod')}</button>` : ''}
         <button class="pact" data-act="clockadjust"><span class="i">🕐</span>${T('adjustClock')}</button>
-        ${last ? `<button class="pact" data-act="finalize"><span class="i">🏁</span>${T('fullTime')}</button>` : ''}
+        <button class="pact" data-act="finalize"><span class="i">🏁</span>${T('endMatch')}</button>
       </div>
       ${close}
     </div>`;
@@ -700,6 +740,7 @@ function createMatch(form) {
   s.match = m;
   s.plan = [];
   s.events = [];
+  s.creating = false;
   saveMatch(m);
   store.savePlan(m.id, []);
   s.route = 'plan';
@@ -789,7 +830,18 @@ function handle(ev) {
     case 'lang': switchLang(); return;
     case 'nav': s.route = a === 'plan' ? 'plan' : null; render(); return;
     case 'home': s.route = 'home'; s.tab = 'match'; s.sheet = null; render(); return;
-    case 'resume': s.route = 'live'; s.sheet = null; render(); return;
+    case 'resume': {
+      const live = store.listMatches().find((m) => m.status === 'live');
+      if (live) selectMatch(live);
+      s.route = 'live'; s.sheet = null; render(); return;
+    }
+    case 'openmatch': {
+      const m = store.listMatches().find((x) => x.id === a);
+      if (m) { selectMatch(m); s.route = 'plan'; }
+      render(); return;
+    }
+    case 'newmatch': s.creating = true; s.route = null; render(); return;
+    case 'cancelnew': s.creating = false; render(); return;
     case 'periodsheet': s.sheet = { kind: 'period' }; render(); return;
     case 'clockadjust': s.sheet = { kind: 'clock' }; render(); return;
     case 'endperiod': {
@@ -815,6 +867,7 @@ function handle(ev) {
     case 'autoplan': autoPlan(); return;
     case 'startmatch': startMatch(); return;
     case 'finalize': {
+      if (!confirm(T('confirmEnd'))) return;
       act('finalize', {}, { silent: true });
       s.match.status = 'final'; saveMatch();
       s.route = 'recap'; s.sheet = null; render(); return;

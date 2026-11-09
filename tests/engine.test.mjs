@@ -295,6 +295,22 @@ test('project: minutes are never double counted for one player', () => {
   assertInvariant(s);
 });
 
+test('project: finalize stops the clock for good', () => {
+  const events = [
+    lineup(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']),
+    ev('period_start', at(0), { period: 1 }),
+    ev('finalize', at(8), {}),
+  ];
+  const early = project(events, CONFIG, at(8));
+  const later = project(events, CONFIG, at(25));
+
+  assert.equal(early.clockMs, 8 * MIN);
+  assert.equal(later.clockMs, 8 * MIN, 'minutes must not accrue after the final whistle');
+  assert.equal(later.totalRunningMs, early.totalRunningMs);
+  assert.equal(later.status, 'final');
+  assertInvariant(later);
+});
+
 /* ---------------------------------------------------------------- *
  * The invariant, under abuse
  * ---------------------------------------------------------------- */

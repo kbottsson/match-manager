@@ -103,6 +103,9 @@ export default {
   deletePlayer: 'Remove', confirmDelete: 'Delete this match and its log?',
   benchShort: 'BENCH', autoFill: 'Auto-fill',
   home: 'Home', resume: 'Resume',
+  upcoming: 'Upcoming', planAnother: 'Plan another match', notStarted: 'Not started',
+  endMatch: 'End match', confirmEnd: 'End this match now? The clock stops and the match is closed.',
+  noUpcoming: 'No matches planned.',
   tapEmptyCell: 'Tap a cell to place a player. The bench row shows who is sitting out that block.',
 
   pos: {

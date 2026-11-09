@@ -93,6 +93,9 @@ export default {
   deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?',
   benchShort: 'BÄNK', autoFill: 'Fyll automatiskt',
   home: 'Hem', resume: 'Fortsätt',
+  upcoming: 'Kommande', planAnother: 'Planera ännu en match', notStarted: 'Ej startad',
+  endMatch: 'Avsluta match', confirmEnd: 'Avsluta matchen nu? Klockan stannar och matchen stängs.',
+  noUpcoming: 'Inga matcher planerade.',
   tapEmptyCell: 'Tryck på en ruta för att sätta en spelare. Bänkraden visar vilka som vilar i det blocket.',
 
   pos: {

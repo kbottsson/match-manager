@@ -371,6 +371,9 @@ export function project(events = [], config = {}, nowMs = Date.now()) {
         break;
 
       case 'finalize':
+        // The match is over: stop the clock, or every subsequent projection
+        // would keep crediting minutes to whoever is on the field.
+        st.state = 'ended';
         st.status = 'final';
         break;
 
