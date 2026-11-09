@@ -81,7 +81,8 @@ export default {
   history: 'Historik',
   noMatches: 'Inga matcher än',
 
-  tabMatch: 'Match', tabSquad: 'Trupp', tabHistory: 'Historik',
+  tabMatch: 'Match', tabSquad: 'Trupp', tabHistory: 'Historik', tabTeams: 'Lag',
+  clubName: 'Klubb',
   newMatch: 'Ny match', opponent: 'Motståndare', venue: 'Plats', kickoff: 'Datum',
   periods: 'Perioder', minutesEach: 'Minuter per period',
   createMatch: 'Skapa match', openPlan: 'Planera matchen', startMatch: 'Starta match',
@@ -97,6 +98,11 @@ export default {
   endMatch: 'Avsluta match', confirmEnd: 'Avsluta matchen nu? Klockan stannar och matchen stängs.',
   noUpcoming: 'Inga matcher planerade.',
   squadTitle: 'Vilka är med idag', squadOf: '{n} av {total}', saved: 'Sparat',
+  newTeam: 'Nytt lag', teamNameLbl: 'Lagnamn', teamPlayers: 'Spelare från truppen',
+  noTeams: 'Inga lag än. Skapa ett och välj spelare från truppen.',
+  deleteTeam: 'Ta bort lag', teamForMatch: 'Lag', playersN: '{n} spelare',
+  confirmDeleteTeam: 'Ta bort laget? Matcherna behåller sin historik.',
+  noTeamForMatch: 'Skapa ett lag först – under Lag.',
   rosterEmpty: 'Lägg upp barnen här en gång – välj sedan vilka som spelar varje match.',
   tapEmptyCell: 'Tryck på en ruta för att sätta en spelare. Bänkraden visar vilka som vilar i det blocket.',
 

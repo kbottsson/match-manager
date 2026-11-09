@@ -26,6 +26,7 @@ const s = {
   route: null,
   tab: 'match',
   creating: false,
+  editingTeam: null,
 };
 
 function config() {
@@ -52,6 +53,11 @@ function boot() {
   setLang(s.lang);
   s.team = store.loadTeam();
   const matches = store.listMatches();
+  // Migration: an existing roster with no teams becomes one team holding everyone.
+  if (s.team?.players?.length && !store.loadTeams().length) {
+    store.saveTeams([{ id: 't-default', name: s.team.name || 'Team 1',
+      playerIds: s.team.players.map((p) => p.id) }]);
+  }
   // Land on the live match only; everything else is opened from the list.
   s.match = matches.find((m) => m.status === 'live') || null;
   if (s.match) {
@@ -155,6 +161,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 function routeNow() {
   if (!s.team || !s.team.players?.length) return 'setup';
   if (s.creating) return 'setup';
+  if (s.route === 'team' && s.editingTeam) return 'team';
   if (s.route === 'home') return 'setup';
   if (!s.match) return 'setup';
   if (s.match.status === 'live') return 'live';
@@ -175,6 +182,7 @@ function render() {
   const route = routeNow();
 
   if (route === 'live') app.innerHTML = viewLive();
+  else if (route === 'team') app.innerHTML = viewTeam();
   else if (route === 'plan') app.innerHTML = viewPlan();
   else if (route === 'recap') app.innerHTML = viewRecap();
   else app.innerHTML = viewSetup();
@@ -222,10 +230,13 @@ function headerPlain(title, sub, right = '') {
  * ------------------------------------------------------------------ */
 
 function viewSetup() {
-  const tabs = [['match', T('tabMatch')], ['squad', T('tabSquad')], ['history', T('tabHistory')]]
+  const tabs = [['match', T('tabMatch')], ['squad', T('tabSquad')], ['teams', T('tabTeams')], ['history', T('tabHistory')]]
     .map(([k, label]) => `<button class="tab${s.tab === k ? ' on' : ''}" data-act="tab:${k}">${label}</button>`)
     .join('');
-  const body = s.tab === 'squad' ? squadCard() : s.tab === 'history' ? historyCard() : matchTab();
+  const body = s.tab === 'squad' ? squadCard()
+    : s.tab === 'teams' ? teamsTab()
+    : s.tab === 'history' ? historyCard()
+    : matchTab();
   const lang = `<button class="chip period" data-act="lang">${T('language')}</button>`;
   return headerPlain(s.team?.name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
     + `<div class="view"><div class="tabs">${tabs}</div><div class="setup">${body}</div></div>`;
@@ -250,8 +261,68 @@ function selectMatch(match) {
  * Match tab: the live match if there is one, then everything planned ahead.
  * Planning several matches in advance is the whole point of this list.
  */
+function teamsTab() {
+  const list = teams();
+  return `<div class="card">
+      <h3>${T('tabTeams')}</h3>
+      ${list.length
+        ? list.map((t) => `<button class="matchrow" data-act="openteam:${t.id}">
+            <span class="opp">${esc(t.name)}</span>
+            <span class="dt">${T('playersN', { n: t.playerIds.length })}</span>
+            <span style="color:var(--ink3);font-size:17px;line-height:1">›</span>
+          </button>`).join('')
+        : `<div class="muted">${T('noTeams')}</div>`}
+      <button class="btn wide" style="margin-top:12px" data-act="newteam">+ ${T('newTeam')}</button>
+    </div>`;
+}
+
+function viewTeam() {
+  const t = s.editingTeam;
+  const list = roster();
+  return `<header>
+      <div class="toprow">
+        <button class="back" data-act="backteam" aria-label="${T('cancel')}">‹</button>
+        <span>${T('tabTeams')}</span>
+        <span class="grow"></span>
+        <button class="chip period" data-act="saveteam2">${T('save')}</button>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+        <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">${esc(t.name || T('newTeam'))}</div>
+      </div>
+    </header>`
+    + `<div class="view"><div class="setup">
+      <div class="card">
+        <h3>${T('teamNameLbl')}</h3>
+        <form id="teamnameform">
+          <div class="field" style="margin:0">
+            <input name="teamname" value="${esc(t.name || '')}" placeholder="P16 A" autocomplete="off">
+          </div>
+        </form>
+      </div>
+      <div class="card">
+        <h3>${T('teamPlayers')} · ${t.playerIds.length}/${list.length}</h3>
+        ${list.length
+          ? `<div class="chiprow" style="padding:0">${list.map((pl) => `<button
+              class="tog ${t.playerIds.includes(pl.id) ? 'on' : 'off'}"
+              data-act="togmember:${pl.id}">${esc(pl.name)}</button>`).join('')}</div>`
+          : `<div class="muted">${T('rosterEmpty')}</div>`}
+      </div>
+      ${t.isNew ? '' : `<button class="btn wide" style="color:var(--red);border-color:#e6cfcc"
+        data-act="deleteteam">${T('deleteTeam')}</button>`}
+    </div></div>`;
+}
+
 function matchTab() {
   if (!s.team.players.length) return `<div class="empty">${T('squadEmpty')}</div>`;
+
+  // A match is played by a team, so there has to be one first.
+  if (!teams().length) {
+    return `<div class="card">
+      <h3>${T('newMatch')}</h3>
+      <div class="muted">${T('noTeamForMatch')}</div>
+      <button class="btn primary" style="width:100%;margin-top:12px" data-act="goto:teams">${T('newTeam')}</button>
+    </div>`;
+  }
 
   const all = store.listMatches();
   const live = all.find((m) => m.status === 'live');
@@ -298,6 +369,8 @@ function newMatchForm(onlyOption = false) {
         <div class="field"><label>${T('minutesEach')}</label>
           <input name="minutes" type="number" min="5" max="45" value="20" inputmode="numeric"></div>
       </div>
+      <div class="field"><label>${T('teamForMatch')}</label>
+        <select name="teamid">${teams().map((tm) => `<option value="${tm.id}">${esc(tm.name)}</option>`).join('')}</select></div>
       <div class="field"><label>${T('blockLength')}</label>
         <select name="block">
           <option value="7" selected>${T('block7')}</option>
@@ -336,9 +409,9 @@ function squadCard() {
       </form>
     </div>
     <div class="card">
-      <h3>${T('teamName')}</h3>
+      <h3>${T('clubName')}</h3>
       <form id="teamform">
-        <div class="field"><label>${T('teamName')}</label>
+        <div class="field"><label>${T('clubName')}</label>
           <input name="teamname" value="${esc(s.team?.name || '')}" placeholder="Uppåkra P16" autocomplete="off"></div>
         <button class="btn wide" data-act="saveteam">${T('save')}</button>
       </form>
@@ -414,8 +487,8 @@ function viewPlan() {
 
   const squadBar = `<div class="squadbar">
       <div class="squadhead"><span>${T('squadTitle')}</span>
-        <span>${T('squadOf', { n: pool.length, total: roster().length })}</span></div>
-      <div class="chiprow">${roster().map((pl) => `<button
+        <span>${T('squadOf', { n: pool.length, total: teamRoster().length })}</span></div>
+      <div class="chiprow">${teamRoster().map((pl) => `<button
           class="tog ${inSquad(pl.id) ? 'on' : 'off'}" data-act="togplayer:${pl.id}">${esc(pl.name)}</button>`).join('')}</div>
     </div>`;
 
@@ -747,6 +820,7 @@ function createMatch(form) {
     periodCount: Math.max(1, Math.min(6, Number(f.get('periods')) || 3)),
     periodMinutes: Math.max(5, Math.min(45, Number(f.get('minutes')) || 20)),
     blockMinutes: Number(f.get('block')) || 7,
+    teamId: String(f.get('teamid') || teams()[0]?.id || ''),
     status: 'setup',
     createdAt: new Date().toISOString(),
   };
@@ -784,13 +858,32 @@ function roster() {
   return s.team?.players || [];
 }
 
-/** Who is available for THIS match: the roster minus today's absences. */
+function teams() {
+  return store.loadTeams();
+}
+
+function teamById(id) {
+  return teams().find((t) => t.id === id) || null;
+}
+
+function saveTeamsList(list) {
+  store.saveTeams(list);
+}
+
+/** The squad a team brings: roster members picked into this match's team. */
+function teamRoster() {
+  const t = teamById(s.match?.teamId);
+  if (!t) return roster();
+  return roster().filter((p) => t.playerIds.includes(p.id));
+}
+
+/** Who is actually here today: the team minus this match's absences. */
 function inSquad(id) {
   return !(s.match?.unavailable || []).includes(id);
 }
 
 function squad() {
-  return roster().filter((p) => inSquad(p.id));
+  return teamRoster().filter((p) => inSquad(p.id));
 }
 
 /** Plan cells and availability must not reference a kid who left the roster. */
@@ -886,6 +979,42 @@ function handle(ev) {
       render(); return;
     }
     case 'newmatch': s.creating = true; s.route = null; render(); return;
+    case 'goto': s.tab = a; s.creating = false; render(); return;
+
+    case 'newteam':
+      s.editingTeam = { id: uid(), name: '', playerIds: [], isNew: true };
+      s.route = 'team'; render(); return;
+    case 'openteam': {
+      const t = teamById(a);
+      if (t) { s.editingTeam = { ...t, playerIds: [...t.playerIds] }; s.route = 'team'; }
+      render(); return;
+    }
+    case 'togmember': {
+      const t = s.editingTeam;
+      // Typing then tapping a player must not lose the name: capture it first,
+      // because the editor re-renders from state.
+      const input = document.querySelector('#teamnameform [name="teamname"]');
+      if (input) t.name = input.value;
+      t.playerIds = t.playerIds.includes(a) ? t.playerIds.filter((x) => x !== a) : [...t.playerIds, a];
+      render(); return;
+    }
+    case 'saveteam2': {
+      const t = s.editingTeam;
+      const input = document.querySelector('#teamnameform [name="teamname"]');
+      const name = (input?.value || '').trim() || T('newTeam');
+      const list = teams().filter((x) => x.id !== t.id);
+      list.push({ id: t.id, name, playerIds: [...t.playerIds] });
+      saveTeamsList(list);
+      s.editingTeam = null; s.route = null;
+      showToast(`✓ ${T('saved')}`, null);
+      return;
+    }
+    case 'deleteteam': {
+      if (!confirm(T('confirmDeleteTeam'))) return;
+      saveTeamsList(teams().filter((x) => x.id !== s.editingTeam.id));
+      s.editingTeam = null; s.route = null; render(); return;
+    }
+    case 'backteam': s.editingTeam = null; s.route = null; render(); return;
     case 'cancelnew': s.creating = false; render(); return;
     case 'periodsheet': s.sheet = { kind: 'period' }; render(); return;
     case 'clockadjust': s.sheet = { kind: 'clock' }; render(); return;
@@ -1047,10 +1176,11 @@ function seedDemo() {
 
   s.team = { id: 't1', name: 'Uppåkra P16', players };
   store.saveTeam(s.team);
+  store.saveTeams([{ id: 'tm1', name: 'P16 A', playerIds: players.map((p) => p.id) }]);
 
   const match = {
     id: 'm1', opponent: 'Lunds BK', kickoff: new Date(now).toISOString().slice(0, 10),
-    periodCount: 3, periodMinutes: 20, blockMinutes: 7, status: 'live',
+    periodCount: 3, periodMinutes: 20, blockMinutes: 7, status: 'live', teamId: 'tm1',
   };
   s.match = match;
   store.saveMatch(match);

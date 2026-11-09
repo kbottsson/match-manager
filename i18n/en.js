@@ -91,7 +91,8 @@ export default {
   history: 'History',
   noMatches: 'No matches yet',
 
-  tabMatch: 'Match', tabSquad: 'Roster', tabHistory: 'History',
+  tabMatch: 'Match', tabSquad: 'Roster', tabHistory: 'History', tabTeams: 'Teams',
+  clubName: 'Club',
   newMatch: 'New match', opponent: 'Opponent', venue: 'Venue', kickoff: 'Date',
   periods: 'Periods', minutesEach: 'Minutes per period',
   createMatch: 'Create match', openPlan: 'Plan the match', startMatch: 'Start match',
@@ -107,6 +108,11 @@ export default {
   endMatch: 'End match', confirmEnd: 'End this match now? The clock stops and the match is closed.',
   noUpcoming: 'No matches planned.',
   squadTitle: 'Who is here today', squadOf: '{n} of {total}', saved: 'Saved',
+  newTeam: 'New team', teamNameLbl: 'Team name', teamPlayers: 'Players from the roster',
+  noTeams: 'No teams yet. Create one and pick players from the roster.',
+  deleteTeam: 'Delete team', teamForMatch: 'Team', playersN: '{n} players',
+  confirmDeleteTeam: 'Delete this team? Matches keep their history.',
+  noTeamForMatch: 'Create a team first — Teams tab.',
   rosterEmpty: 'Add the kids once here — then pick who is playing each match.',
   tapEmptyCell: 'Tap a cell to place a player. The bench row shows who is sitting out that block.',
 

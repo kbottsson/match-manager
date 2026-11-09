@@ -10,6 +10,7 @@
 const P = 'mm.v1.';
 const K = {
   team: P + 'team',
+  teams: P + 'teams',
   matches: P + 'matches',
   events: (id) => P + 'events.' + id,
   plan: (id) => P + 'plan.' + id,
@@ -53,7 +54,6 @@ export function createStore(storage = globalThis.localStorage) {
     /* ---- matches ---- */
     listMatches,
     loadMatch: (id) => listMatches().find((m) => m.id === id) || null,
-
     saveMatch(match) {
       const all = listMatches();
       const i = all.findIndex((m) => m.id === match.id);
@@ -61,6 +61,10 @@ export function createStore(storage = globalThis.localStorage) {
       else all[i] = match;
       return write(K.matches, all);
     },
+
+    /* ---- teams (named groups picked from the roster) ---- */
+    loadTeams: () => asArray(read(K.teams, [])),
+    saveTeams: (list) => write(K.teams, list),
 
     /* ---- plan (configuration, not history) ---- */
     loadPlan: (matchId) => asArray(read(K.plan(matchId), [])),
@@ -112,6 +116,7 @@ export function createStore(storage = globalThis.localStorage) {
         v: 1,
         exportedAt: new Date().toISOString(),
         team: read(K.team, null),
+        teams: read(K.teams, []),
         matches,
         plan: Object.fromEntries(matches.map((m) => [m.id, read(K.plan(m.id), [])])),
         events: Object.fromEntries(matches.map((m) => [m.id, read(K.events(m.id), [])])),
@@ -121,6 +126,7 @@ export function createStore(storage = globalThis.localStorage) {
     importAll(data) {
       if (!data || data.v !== 1) return false;
       write(K.team, data.team);
+      write(K.teams, data.teams || []);
       write(K.matches, data.matches || []);
       for (const [id, cells] of Object.entries(data.plan || {})) write(K.plan(id), cells);
       for (const [id, evs] of Object.entries(data.events || {})) write(K.events(id), evs);

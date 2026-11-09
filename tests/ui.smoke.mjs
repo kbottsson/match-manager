@@ -232,6 +232,34 @@ async function main() {
   ok('"plan another" offered alongside it',
     await evaluate("!!document.querySelector('[data-act=\"newmatch\"]')"));
 
+  console.log('teams');
+  await click('[data-act="tab:teams"]');
+  await sleep(250);
+  ok('teams tab lists the seeded team', (await text('body')).includes('P16 A'));
+  ok('team row shows its player count', /9 players/i.test(await text('body')), await text('.card'));
+
+  await click('[data-act="newteam"]');
+  await sleep(300);
+  ok('team editor opened', await evaluate("!!document.querySelector('#teamnameform')"));
+  await evaluate(`(() => { document.querySelector('#teamnameform [name="teamname"]').value = 'P16 B'; return 1 })()`);
+  const togs = await evaluate("document.querySelectorAll('.card .chiprow .tog').length");
+  ok('roster players offered for selection', togs >= 9, String(togs));
+  await evaluate("document.querySelectorAll('.card .chiprow .tog')[0].click()");
+  await evaluate("document.querySelectorAll('.card .chiprow .tog')[1].click()");
+  await sleep(200);
+  ok('picking players updates the count', /2\/9/.test(await text('body')), await text('.card'));
+  await click('[data-act="saveteam2"]');
+  await sleep(300);
+  ok('new team listed', (await text('body')).includes('P16 B'));
+  ok('team carries its two players', /2 players/i.test(await text('body')));
+
+  await click('[data-act="tab:match"]');
+  await sleep(200);
+  await click('[data-act="newmatch"]');
+  await sleep(250);
+  ok('match form asks which team',
+    await evaluate("document.querySelectorAll('select[name=\"teamid\"] option').length") === 2);
+
   ws.close();
 }
 
