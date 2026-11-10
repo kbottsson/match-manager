@@ -76,6 +76,10 @@ export default {
   finalScore: 'Slutresultat',
 
   language: 'English',
+  nextChangeIn: 'Nästa byte om', apply: 'Verkställ', now: 'Nu',
+  played: 'spelad', blocksN: '{n} block', readOnlyPlay: 'endast läsning under match',
+  youAreHere: 'Aktuellt block', applied: '{n} byten gjorda',
+  appliedOne: '1 byte gjort', close: 'Stäng',
   save: 'Spara',
   delete: 'Ta bort',
   history: 'Historik',

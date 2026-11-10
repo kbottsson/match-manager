@@ -139,7 +139,10 @@ function describe(ev) {
 
 let toastTimer = null;
 function showToast(html, evId) {
-  s.toast = { html, evId };
+  // A multi-step action (Apply) must undo as one gesture, so the toast can
+  // carry several event ids.
+  const ids = Array.isArray(evId) ? evId : evId ? [evId] : [];
+  s.toast = { html, evId: ids.join(',') };
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { s.toast = null; render(); }, 6000);
   render();
@@ -192,6 +195,104 @@ function render() {
     <button data-act="undo:${s.toast.evId}">${T('undo')}</button></div>`);
 }
 
+/* ------------------------------------------------------------------ *
+ * Next change — the plan, read against the pitch
+ * ------------------------------------------------------------------ */
+
+function planCell(blockIndex, slot) {
+  return s.plan.find((x) => x.blockIndex === blockIndex && x.slot === slot)?.playerId || null;
+}
+
+/**
+ * What the plan asks for at the next block boundary, diffed against who is
+ * actually on the pitch. Deriving it from the pitch (not the plan alone) means
+ * an early substitution doesn't leave the strip nagging about a player who is
+ * already sitting down.
+ *
+ * Returns null when there is nothing left to do this period.
+ */
+function nextChange(p) {
+  if (p.state === 'idle' || p.state === 'ended') return null;
+  const c = config();
+  const blocks = blockLayout(c).filter((b) => b.period === p.period);
+  if (!blocks.length) return null;
+
+  let i = blocks.findIndex((b) => p.clockMs < b.startMs + b.lengthMs);
+  if (i < 0) i = blocks.length - 1;
+  const nxt = blocks[i + 1];
+  if (!nxt) return null; // last block of the period: nothing planned beyond it
+
+  const known = new Set(s.team.players.map((pl) => pl.id));
+  const planned = SLOTS.map((slot) => planCell(nxt.blockIndex, slot))
+    .filter((id) => id && known.has(id));
+  if (!planned.length) return null;
+
+  const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
+  const outs = SLOTS
+    .filter((sl) => p.onField[sl] && !planned.includes(p.onField[sl]))
+    .map((sl) => ({ slot: sl, id: p.onField[sl] }));
+  const benchIn = SLOTS
+    .filter((sl) => {
+      const want = planCell(nxt.blockIndex, sl);
+      return want && known.has(want) && !onPitch.includes(want);
+    })
+    .map((sl) => ({ slot: sl, id: planCell(nxt.blockIndex, sl) }))
+    .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
+
+  // Substitutions are what the boundary is for. Position shuffles are shown in
+  // the plan sheet, not pushed at the coach — the planner rotates players
+  // through slots, and bubbling six "move" prompts at every boundary is noise.
+  const pairs = [];
+  const usedIn = new Set();
+  for (const out of outs) {
+    const sameSlot = benchIn.find((x) => x.slot === out.slot && !usedIn.has(x.id));
+    const any = sameSlot || benchIn.find((x) => !usedIn.has(x.id));
+    if (!any) continue;
+    usedIn.add(any.id);
+    pairs.push({ off: out.id, on: any.id, slot: out.slot });
+  }
+
+  // A planned position swap with no substitution is still worth surfacing —
+  // but only when it is genuinely small.
+  const moves = pairs.length ? [] : SLOTS
+    .filter((sl) => {
+      const want = planCell(nxt.blockIndex, sl);
+      return want && known.has(want) && p.onField[sl] !== want && onPitch.includes(want);
+    })
+    .map((sl) => ({ player: planCell(nxt.blockIndex, sl), to: sl }))
+    .slice(0, 3);
+  const onlyMoves = moves.length > 0 && moves.length <= 2;
+
+  if (!pairs.length && !onlyMoves) return null;
+  return {
+    msTo: Math.max(0, nxt.startMs - p.clockMs),
+    block: nxt,
+    pairs,
+    moves: onlyMoves ? moves : [],
+  };
+}
+
+function changeStrip(p) {
+  const nc = nextChange(p);
+  if (!nc) return '';
+  const nm = (id) => {
+    const pl = player(id);
+    return pl ? `<b>${esc(pl.name)} ${esc(pl.no)}</b>` : '<b>—</b>';
+  };
+  const items = [
+    ...nc.pairs.map(({ off, on }) => `${nm(off)} → ${nm(on)}`),
+    ...nc.moves.map((m) => `${nm(m.player)} → ${P(m.to)}`),
+  ];
+  return `<div class="nxt">
+      <div class="nxr">
+        <div class="l1"><span class="lab">${T('nextChangeIn')}</span>
+          <span class="cd">${mmss(nc.msTo)}</span></div>
+        <div class="chg">${items.join(' · ')}</div>
+      </div>
+      <button class="apply" data-act="applyplan">${T('apply')}</button>
+    </div>`;
+}
+
 function headerLive(p, showScore = true) {
   const late = p.clockMs > (config().periodMinutes * MIN);
   const pct = Math.min(100, (p.clockMs / (config().periodMinutes * MIN)) * 100);
@@ -203,6 +304,7 @@ function headerLive(p, showScore = true) {
       <button class="back" data-act="home" aria-label="${T('home')}">‹</button>
       ${stateChip}
       <button class="chip period" data-act="periodsheet">${T('periodN', { n: p.period })}<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
+      <button class="chip period" data-act="plansheet">${T('plan')}</button>
       <span class="grow"></span>
       <span>${esc(s.match?.opponent || s.team.name)}</span>
     </div>
@@ -213,7 +315,7 @@ function headerLive(p, showScore = true) {
       ${showScore ? `<div class="score">${p.score.for}<span class="dash">–</span>${p.score.against}</div>` : ''}
     </div>
     <div class="progress${late ? ' late' : ''}" data-progress><i style="width:${pct}%"></i></div>
-  </header>`;
+  </header>${changeStrip(p)}`;
 }
 
 function headerPlain(title, sub, right = '') {
@@ -600,9 +702,73 @@ function gridOf(items) {
     </button>`).join('')}</div>`;
 }
 
+/** Read-only view of the plan, from inside a live match. */
+function planSheetHtml() {
+  const c = config();
+  const p = proj();
+  const blocks = blockLayout(c);
+  const out = [];
+
+  for (let period = 1; period <= c.periodCount; period++) {
+    const list = blocks.filter((b) => b.period === period);
+    if (!list.length) continue;
+    const span = `${list[0].label.split('–')[0]}–${list[list.length - 1].label.split('–')[1]}`;
+
+    // Periods you have already left collapse to a single line: they take up
+    // height and you can't act on them.
+    if (period !== p.period) {
+      const done = period < p.period;
+      out.push(`<div class="pcoll"><span>${T('periodN', { n: period })}${done ? ` · ${T('played')}` : ''}</span>
+        <span class="r">${done ? '✓' : T('blocksN', { n: list.length })}</span></div>`);
+      continue;
+    }
+
+    const cur = list.find((b) => p.clockMs >= b.startMs && p.clockMs < b.startMs + b.lengthMs) || list[0];
+    const isNow = (b) => b.blockIndex === cur.blockIndex;
+
+    const head = `<tr><th></th>${list.map((b) => `<th class="${isNow(b) ? 'now' : ''}">${b.label}${
+      isNow(b) ? `<span class="nowl">${T('now')}</span>` : ''}</th>`).join('')}</tr>`;
+
+    const rows = SLOTS.map((slot) => `<tr>
+        <td class="lbl">${P(slot)}</td>
+        ${list.map((b) => {
+          const pid = planCell(b.blockIndex, slot);
+          const gk = pid && slot === 'G' ? ' gk' : '';
+          return `<td class="cell${pid ? '' : ' empty'}${gk}${isNow(b) ? ' now' : ''}">${
+            pid ? esc(player(pid)?.name || '—') : '+'}</td>`;
+        }).join('')}
+      </tr>`).join('');
+
+    const benchRow = `<tr class="bench">
+        <td class="lbl">${T('benchShort')}</td>
+        ${list.map((b) => {
+          const used = new Set(s.plan.filter((x) => x.blockIndex === b.blockIndex).map((x) => x.playerId));
+          const rest = teamRoster().filter((pl) => !used.has(pl.id));
+          return `<td class="cell${isNow(b) ? ' now' : ''}">${
+            rest.length ? rest.map((r) => esc(r.name)).join(', ') : '—'}</td>`;
+        }).join('')}
+      </tr>`;
+
+    out.push(`<div class="phead2">${T('periodN', { n: period }).toUpperCase()}<span>${span}</span></div>
+      <div class="ptable"><table>${head}${rows}${benchRow}</table></div>`);
+  }
+
+  return `<div class="scrim" data-act="sheet:close"></div>
+    <div class="sheet tall">
+      <div class="grab"></div>
+      <h2>${T('plan')}<span class="when">${T('periodN', { n: p.period })} · ${mmss(p.clockMs)}</span></h2>
+      <div class="psub">${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes} · ${T('readOnlyPlay')}</div>
+      <div class="pbody">${out.join('')}
+        <div class="plegend"><span class="sw"></span>${T('youAreHere')}</div>
+      </div>
+      <button class="sheetclose" data-act="sheet:close">${T('close')}</button>
+    </div>`;
+}
+
 function renderSheet() {
   const p = proj();
   const sh = s.sheet;
+  if (sh.kind === 'planview') return planSheetHtml();
   const when = `<span class="when">${T('periodN', { n: p.period })} · ${mmss(p.clockMs)}</span>`;
   const onIds = Object.values(p.onField).filter(Boolean);
   const close = `<button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>`;
@@ -1017,6 +1183,34 @@ function handle(ev) {
     case 'backteam': s.editingTeam = null; s.route = null; render(); return;
     case 'cancelnew': s.creating = false; render(); return;
     case 'periodsheet': s.sheet = { kind: 'period' }; render(); return;
+    case 'plansheet': s.sheet = { kind: 'planview' }; render(); return;
+    case 'applyplan': {
+      const nc = nextChange(p);
+      if (!nc) return;
+      const ids = [];
+      for (const pair of nc.pairs) {
+        // Re-read the pitch before each change: two planned swaps can chain.
+        const cur = proj();
+        const onNow = Object.keys(cur.onField).map((sl) => cur.onField[sl]).filter(Boolean);
+        if (!onNow.includes(pair.off) || onNow.includes(pair.on)) continue;
+        const slot = Object.keys(cur.onField).find((sl) => cur.onField[sl] === pair.off) || pair.slot;
+        const ev = act('sub', { off: [pair.off], on: [pair.on], slots: { [pair.on]: slot } }, { silent: true });
+        if (ev) ids.push(ev.id);
+      }
+      for (const m of nc.moves) {
+        const cur = proj();
+        const from = Object.keys(cur.onField).find((sl) => cur.onField[sl] === m.player);
+        if (!from || from === m.to) continue;
+        const ev = act('move', { player: m.player, from, to: m.to }, { silent: true });
+        if (ev) ids.push(ev.id);
+      }
+      if (ids.length) {
+        const msg = ids.length === 1 ? T('appliedOne') : T('applied', { n: ids.length });
+        showToast(`✓ ${msg}`, ids);
+      }
+      s.sheet = null;
+      render(); return;
+    }
     case 'clockadjust': s.sheet = { kind: 'clock' }; render(); return;
     case 'endperiod': {
       act('period_end', { period: p.period });
@@ -1120,7 +1314,17 @@ function handle(ev) {
       s.sheet = null; render(); return;
     }
 
-    case 'undo': if (a === 'last') undoLast(); else undoEvent(a); return;
+    case 'undo': {
+      if (a === 'last') { undoLast(); return; }
+      const ids = String(a).split(',').filter(Boolean);
+      // Undo newest-first so the projection never sees an inconsistent log.
+      for (const id of [...ids].reverse()) {
+        const v = store.voidEvent(s.match.id, id);
+        if (v) s.events.push(v);
+      }
+      s.toast = null;
+      render(); return;
+    }
     case 'share': share(); return;
 
     default: return;

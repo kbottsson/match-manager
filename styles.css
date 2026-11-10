@@ -232,3 +232,31 @@ table.grid td:active{background:#eae5dc}
 .banner{margin:9px 12px 0;padding:10px 12px;border-radius:10px;background:var(--amber-soft);
   border:1px solid #efdcbd;color:var(--amber);font-size:12px;line-height:1.45}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- next-change strip (live header) ---------- */
+.nxt{display:flex;align-items:center;gap:9px;padding:7px 16px 8px;flex:none;
+  background:var(--amber-soft);border-bottom:1px solid #f0e2c9}
+.nxt .nxr{flex:1;min-width:0}
+.nxt .l1{display:flex;align-items:baseline;gap:6px}
+.nxt .lab{font:700 8.5px/1 var(--num);letter-spacing:.11em;text-transform:uppercase;color:var(--amber)}
+.nxt .cd{font:700 15px/1 var(--num);color:var(--amber);font-variant-numeric:tabular-nums}
+.nxt .chg{font-size:11.5px;line-height:1.3;color:var(--ink2);margin-top:3px}
+.nxt .chg b{font-weight:700;color:var(--ink)}
+.nxt .apply{flex:none;background:var(--green);color:#fff;border-radius:9px;padding:8px 11px;
+  font-size:11px;font-weight:700;letter-spacing:.02em}
+.nxt .apply:active{transform:scale(.97)}
+
+/* ---------- plan sheet (inside a live match) ---------- */
+.sheet.tall{max-height:82%;display:flex;flex-direction:column;padding-bottom:0}
+.sheet.tall h2{padding-right:16px}
+.psub{padding:2px 16px 6px;font-size:11px;color:var(--ink3);flex:none}
+.pbody{flex:0 1 auto;overflow-y:auto;padding-bottom:10px}
+.pcoll{display:flex;align-items:center;justify-content:space-between;margin:9px 8px 0;padding:9px 11px;
+  background:#fff;border:1px solid var(--line);border-radius:11px;font-size:12px;font-weight:600;color:var(--ink3)}
+.pcoll .r{font:600 10px/1 var(--num);color:#a9a294}
+.ptable td.now{background:#f2f8f3}
+.ptable th.now{color:var(--green);background:#f2f8f3}
+.ptable th .nowl{display:block;font:700 6.5px/1 var(--num);letter-spacing:.09em;margin-top:2px;opacity:.9}
+.plegend{display:flex;align-items:center;gap:6px;padding:10px 16px 2px;font-size:10.5px;color:var(--ink3)}
+.plegend .sw{width:10px;height:10px;border-radius:3px;background:#f2f8f3;border:1px solid #cfe3d6}
+.sheet.tall .sheetclose{margin:8px 14px calc(12px + env(safe-area-inset-bottom));width:auto}

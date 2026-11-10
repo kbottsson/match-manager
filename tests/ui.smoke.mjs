@@ -260,6 +260,82 @@ async function main() {
   ok('match form asks which team',
     await evaluate("document.querySelectorAll('select[name=\"teamid\"] option').length") === 2);
 
+  console.log('next change strip + plan sheet');
+  // The teams section left a new-match form open.
+  await evaluate(`(() => {
+    const f = document.querySelector('#matchform');
+    f.opponent.value = 'Strip Test IF';
+    return true;
+  })()`);
+  await click('[data-act="creatematch"]');
+  await sleep(350);
+  await click('[data-act="autoplan"]');
+  await sleep(350);
+  await click('[data-act="startmatch"]');
+  await sleep(450);
+
+  ok('live screen is up', await evaluate("!!document.querySelector('.row')"));
+  ok('next-change strip is shown', await evaluate("!!document.querySelector('.nxt')"));
+  ok('strip carries a countdown', /^\d{1,2}:\d{2}$/.test((await text('.nxt .cd')).trim()),
+    await text('.nxt .cd'));
+  ok('strip names who goes off and on', (await text('.nxt .chg')).includes('→'),
+    await text('.nxt .chg'));
+
+  // What the plan asks for at the next boundary, read straight from the sheet.
+  await click('[data-act="plansheet"]');
+  await sleep(300);
+  ok('plan chip opens the plan sheet', await evaluate("!!document.querySelector('.sheet.tall .ptable')"));
+  ok('current block is marked in the grid',
+    await evaluate("document.querySelectorAll('.ptable th.now').length") === 1);
+  ok('the plan sheet is read-only',
+    await evaluate("document.querySelectorAll('.ptable td.cell[data-act]').length") === 0);
+  const nextCol = await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('.sheet.tall .ptable tr')]
+      .filter(r => r.querySelector('td.lbl') && !r.classList.contains('bench'));
+    return rows.map(r => {
+      const cells = r.querySelectorAll('td.cell');
+      const t = cells[1];
+      return t ? t.innerText.trim() : '';
+    });
+  })()`);
+  const plannedNames = nextCol
+    .filter((v) => v && v !== '+')
+    .join(',')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .sort();
+
+  await click('[data-act="sheet:close"]');
+  await sleep(250);
+
+  const readPitch = `Array.from(document.querySelectorAll('.list .row .nm')).slice(0,7).map(function(n){
+    return (n.textContent || '').replace(/[0-9]+$/, '').trim();
+  })`;
+  const pitchBefore = await evaluate(readPitch) || [];
+
+  await click('[data-act="applyplan"]');
+  await sleep(400);
+
+  ok('the toast reports both changes', /2 changes applied/i.test(await text('.toast')), await text('.toast'));
+
+  const onField = await evaluate(readPitch) || [];
+  ok('Apply puts exactly the planned players on the pitch',
+    JSON.stringify([...onField].sort()) === JSON.stringify(plannedNames),
+    `pitch=${onField.sort().join(',')} plan=${plannedNames.join(',')}`);
+  ok('strip advances to the next boundary (or clears)',
+    (await evaluate("!!document.querySelector('.nxt')")) === false
+    || (await text('.nxt .chg')).includes('→'));
+  ok('strip is blank once the period plan is done',
+    (await evaluate("!!document.querySelector('.nxt')")) === false);
+
+  await click('.toast button');
+  await sleep(400);
+  const pitchUndone = await evaluate(readPitch) || [];
+  ok('one Undo reverses the whole Apply',
+    JSON.stringify([...pitchUndone].sort()) === JSON.stringify([...pitchBefore].sort()),
+    `undone=${pitchUndone.join(',')} before=${pitchBefore.join(',')}`);
+
   ws.close();
 }
 

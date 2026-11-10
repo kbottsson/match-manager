@@ -86,6 +86,10 @@ export default {
 
   // misc
   language: 'Svenska',
+  nextChangeIn: 'Next change in', apply: 'Apply', now: 'Now',
+  played: 'played', blocksN: '{n} blocks', readOnlyPlay: 'read-only during play',
+  youAreHere: 'Current block', applied: '{n} changes applied',
+  appliedOne: '1 change applied', close: 'Close',
   save: 'Save',
   delete: 'Delete',
   history: 'History',
