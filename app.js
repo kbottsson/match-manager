@@ -203,13 +203,54 @@ function planCell(blockIndex, slot) {
   return s.plan.find((x) => x.blockIndex === blockIndex && x.slot === slot)?.playerId || null;
 }
 
+/** Substitution pairs to reach `blockIndex`'s plan from the pitch as it is now. */
+function pairsFor(blockIndex, p, known) {
+  const planned = SLOTS.map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
+  // A half-filled block can't be trusted as a target: it would read as
+  // "everyone not listed must come off".
+  if (planned.length !== SLOTS.length) return null;
+  const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
+
+  const outs = SLOTS
+    .filter((sl) => p.onField[sl] && !planned.includes(p.onField[sl]))
+    .map((sl) => ({ slot: sl, id: p.onField[sl] }));
+
+  const benchIn = SLOTS
+    .map((sl) => ({ slot: sl, id: planCell(blockIndex, sl) }))
+    .filter((x) => x.id && known.has(x.id) && !onPitch.includes(x.id))
+    .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
+
+  const pairs = [];
+  const used = new Set();
+  for (const out of outs) {
+    const same = benchIn.find((x) => x.slot === out.slot && !used.has(x.id));
+    const any = same || benchIn.find((x) => !used.has(x.id));
+    if (!any) continue;
+    used.add(any.id);
+    pairs.push({ off: out.id, on: any.id, slot: out.slot });
+  }
+  return pairs;
+}
+
+/** True when exactly the players planned for `blockIndex` are the ones out there. */
+function pitchIsPlan(blockIndex, p, known) {
+  const want = SLOTS.map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
+  if (want.length !== SLOTS.length) return false;
+  const on = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
+  if (on.length !== want.length) return false;
+  return on.every((id) => want.includes(id));
+}
+
 /**
- * What the plan asks for at the next block boundary, diffed against who is
- * actually on the pitch. Deriving it from the pitch (not the plan alone) means
- * an early substitution doesn't leave the strip nagging about a player who is
- * already sitting down.
+ * What to do at this boundary, read against the pitch rather than the plan.
  *
- * Returns null when there is nothing left to do this period.
+ * Order matters: if the block you are IN doesn't match its plan (you were late,
+ * or a sub happened early), that change is still owed — it stays on screen as
+ * overdue instead of silently sliding to the next boundary.
+ *
+ * Substitutions only. The planner rotates players through positions, and
+ * bubbling six "move" prompts at every boundary is noise; positions live on the
+ * plan sheet.
  */
 function nextChange(p) {
   if (p.state === 'idle' || p.state === 'ended') return null;
@@ -219,57 +260,38 @@ function nextChange(p) {
 
   let i = blocks.findIndex((b) => p.clockMs < b.startMs + b.lengthMs);
   if (i < 0) i = blocks.length - 1;
+  const cur = blocks[i];
   const nxt = blocks[i + 1];
-  if (!nxt) return null; // last block of the period: nothing planned beyond it
-
   const known = new Set(s.team.players.map((pl) => pl.id));
-  const planned = SLOTS.map((slot) => planCell(nxt.blockIndex, slot))
-    .filter((id) => id && known.has(id));
-  if (!planned.length) return null;
 
-  const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
-  const outs = SLOTS
-    .filter((sl) => p.onField[sl] && !planned.includes(p.onField[sl]))
-    .map((sl) => ({ slot: sl, id: p.onField[sl] }));
-  const benchIn = SLOTS
-    .filter((sl) => {
-      const want = planCell(nxt.blockIndex, sl);
-      return want && known.has(want) && !onPitch.includes(want);
-    })
-    .map((sl) => ({ slot: sl, id: planCell(nxt.blockIndex, sl) }))
-    .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
-
-  // Substitutions are what the boundary is for. Position shuffles are shown in
-  // the plan sheet, not pushed at the coach — the planner rotates players
-  // through slots, and bubbling six "move" prompts at every boundary is noise.
-  const pairs = [];
-  const usedIn = new Set();
-  for (const out of outs) {
-    const sameSlot = benchIn.find((x) => x.slot === out.slot && !usedIn.has(x.id));
-    const any = sameSlot || benchIn.find((x) => !usedIn.has(x.id));
-    if (!any) continue;
-    usedIn.add(any.id);
-    pairs.push({ off: out.id, on: any.id, slot: out.slot });
+  // Still owed for the block we are in? Only if you have not moved on yet —
+  // i.e. the pitch is still the previous block's lineup. Applying early puts a
+  // later lineup out there, which must not read as "overdue" in reverse.
+  const prev = blocks[i - 1];
+  const owed = prev && pitchIsPlan(prev.blockIndex, p, known)
+    ? pairsFor(cur.blockIndex, p, known)
+    : null;
+  if (owed && owed.length) {
+    return { msTo: 0, lateMs: Math.max(0, p.clockMs - cur.startMs), pairs: owed, moves: [], overdue: true };
   }
 
-  // A planned position swap with no substitution is still worth surfacing —
-  // but only when it is genuinely small.
-  const moves = pairs.length ? [] : SLOTS
+  if (!nxt) return null;
+
+  const ahead = pairsFor(nxt.blockIndex, p, known);
+  if (ahead && ahead.length) {
+    return { msTo: Math.max(0, nxt.startMs - p.clockMs), lateMs: 0, pairs: ahead, moves: [], overdue: false };
+  }
+
+  // A small planned position swap with no substitution is still worth a nudge.
+  const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
+  const moves = SLOTS
     .filter((sl) => {
       const want = planCell(nxt.blockIndex, sl);
       return want && known.has(want) && p.onField[sl] !== want && onPitch.includes(want);
     })
-    .map((sl) => ({ player: planCell(nxt.blockIndex, sl), to: sl }))
-    .slice(0, 3);
-  const onlyMoves = moves.length > 0 && moves.length <= 2;
-
-  if (!pairs.length && !onlyMoves) return null;
-  return {
-    msTo: Math.max(0, nxt.startMs - p.clockMs),
-    block: nxt,
-    pairs,
-    moves: onlyMoves ? moves : [],
-  };
+    .map((sl) => ({ player: planCell(nxt.blockIndex, sl), to: sl }));
+  if (!moves.length || moves.length > 2) return null;
+  return { msTo: Math.max(0, nxt.startMs - p.clockMs), lateMs: 0, pairs: [], moves, overdue: false };
 }
 
 function changeStrip(p) {
@@ -283,10 +305,12 @@ function changeStrip(p) {
     ...nc.pairs.map(({ off, on }) => `${nm(off)} → ${nm(on)}`),
     ...nc.moves.map((m) => `${nm(m.player)} → ${P(m.to)}`),
   ];
-  return `<div class="nxt">
+  const label = nc.overdue ? T('overdue') : T('nextChangeIn');
+  const clock = nc.overdue ? `+${mmss(nc.lateMs)}` : mmss(nc.msTo);
+  return `<div class="nxt${nc.overdue ? ' late' : ''}">
       <div class="nxr">
-        <div class="l1"><span class="lab">${T('nextChangeIn')}</span>
-          <span class="cd">${mmss(nc.msTo)}</span></div>
+        <div class="l1"><span class="lab">${label}</span>
+          <span class="cd">${clock}</span></div>
         <div class="chg">${items.join(' · ')}</div>
       </div>
       <button class="apply" data-act="applyplan">${T('apply')}</button>
@@ -891,6 +915,10 @@ function renderSheet() {
         <button class="gbtn" data-act="adjust:${cur + 1}">+1:00</button>
         <button class="gbtn" data-act="adjust:${config().periodMinutes}">${config().periodMinutes}:00</button>
       </div>
+      <div class="setexact">
+        <input name="exactmin" type="number" min="0" max="120" step="1" value="${cur}" inputmode="numeric">
+        <button data-act="setexact">${T('setExact')}</button>
+      </div>
       ${close}
     </div>`;
   }
@@ -1268,6 +1296,13 @@ function handle(ev) {
       }
       render(); return;
     }
+    case 'setexact': {
+      const el = document.querySelector('#app .setexact [name="exactmin"]');
+      const mins = Math.max(0, Math.min(120, Number(el?.value) || 0));
+      act('clock_adjust', { period: p.period, toMs: mins * MIN }, { silent: true });
+      s.sheet = null; render(); return;
+    }
+
     case 'adjust': {
       act('clock_adjust', { period: p.period, toMs: Math.max(0, Number(a) || 0) * MIN });
       s.sheet = null; render(); return;

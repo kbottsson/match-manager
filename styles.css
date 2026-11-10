@@ -245,6 +245,8 @@ table.grid td:active{background:#eae5dc}
 .nxt .apply{flex:none;background:var(--green);color:#fff;border-radius:9px;padding:8px 11px;
   font-size:11px;font-weight:700;letter-spacing:.02em}
 .nxt .apply:active{transform:scale(.97)}
+.nxt.late{background:var(--red-soft);border-bottom-color:#f0d3d0}
+.nxt.late .lab,.nxt.late .cd{color:var(--red)}
 
 /* ---------- plan sheet (inside a live match) ---------- */
 .sheet.tall{max-height:82%;display:flex;flex-direction:column;padding-bottom:0}
@@ -260,3 +262,11 @@ table.grid td:active{background:#eae5dc}
 .plegend{display:flex;align-items:center;gap:6px;padding:10px 16px 2px;font-size:10.5px;color:var(--ink3)}
 .plegend .sw{width:10px;height:10px;border-radius:3px;background:#f2f8f3;border:1px solid #cfe3d6}
 .sheet.tall .sheetclose{margin:8px 14px calc(12px + env(safe-area-inset-bottom));width:auto}
+
+/* exact clock correction — mirror the referee's watch */
+.setexact{display:flex;gap:8px;margin-top:9px}
+.setexact input{flex:1;height:46px;border:1px solid var(--line);border-radius:10px;padding:0 11px;
+  background:#fdfcfa;font:600 15px/1 var(--num);min-width:0}
+.setexact button{flex:none;padding:0 14px;border-radius:10px;background:var(--green);color:#fff;
+  font-weight:700;font-size:12.5px}
+.setexact button:active{transform:scale(.97)}

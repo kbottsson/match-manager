@@ -336,6 +336,26 @@ async function main() {
     JSON.stringify([...pitchUndone].sort()) === JSON.stringify([...pitchBefore].sort()),
     `undone=${pitchUndone.join(',')} before=${pitchBefore.join(',')}`);
 
+  console.log('missed boundary');
+  // Jump the clock to 08:00 — two minutes past the first boundary — via the
+  // exact correction behind the period sheet.
+  await click('[data-act="periodsheet"]');
+  await sleep(200);
+  await click('[data-act="clockadjust"]');
+  await sleep(200);
+  await evaluate(`(() => { document.querySelector('.setexact [name="exactmin"]').value = '8'; return 1 })()`);
+  await click('[data-act="setexact"]');
+  await sleep(400);
+  ok('clock can be set exactly, to match the referee', /^08:0/.test(await text('.clock')), await text('.clock'));
+  ok('a change you did not make stays on screen', await evaluate("!!document.querySelector('.nxt.late')"));
+  ok('it is labelled as overdue, not as upcoming',
+    /overdue/i.test(await text('.nxt .lab')), await text('.nxt .lab'));
+  ok('it still names the pair you owe', (await text('.nxt .chg')).includes('→'), await text('.nxt .chg'));
+
+  await click('[data-act="applyplan"]');
+  await sleep(400);
+  ok('applying the overdue change clears it', (await evaluate("!!document.querySelector('.nxt.late')")) === false);
+
   ws.close();
 }
 
