@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Match Manager — live plan review</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{background:#e7e3da;padding:26px 22px 30px}
+  .stage{display:flex;gap:24px;justify-content:center;align-items:flex-start}
+  .col{width:390px}
+  .cap{margin:10px 2px 0;font:600 10px/1.4 -apple-system,sans-serif;letter-spacing:.09em;
+       text-transform:uppercase;color:#7d7568}
+  .cap b{display:block;color:#101418;font-size:12.5px;letter-spacing:-.01em;text-transform:none;margin-bottom:2px}
+  .phone{width:390px;height:844px;background:var(--bg);border-radius:26px;overflow:hidden;
+         position:relative;box-shadow:0 10px 34px rgba(20,24,28,.16),0 0 0 1px rgba(20,24,28,.07)}
+  .phone .app{height:100%}
+
+  /* --- new: next-change strip, lives in the header so it never scrolls away --- */
+  .nxt{display:flex;align-items:center;gap:9px;padding:7px 16px 8px;
+       background:var(--amber-soft);border-bottom:1px solid #f0e2c9}
+  .nxt .l1{display:flex;align-items:baseline;gap:6px}
+  .nxt .lab{font:700 8.5px/1 var(--num);letter-spacing:.11em;text-transform:uppercase;color:var(--amber)}
+  .nxt .cd{font:700 15px/1 var(--num);color:var(--amber);font-variant-numeric:tabular-nums}
+  .nxt .chg{font-size:11.5px;line-height:1.3;color:var(--ink2);margin-top:3px;white-space:nowrap}
+  .nxt .chg b{font-weight:700;color:var(--ink)}
+  .nxt .apply{flex:none;background:var(--green);color:#fff;border-radius:9px;padding:8px 11px;
+              font-size:11px;font-weight:700;letter-spacing:.02em}
+  .nxt.quiet{background:#f6f2ea;border-bottom-color:var(--line2)}
+  .nxt.quiet .lab,.nxt.quiet .cd{color:var(--ink3)}
+
+  /* --- new: row markers --- */
+  .row.mark{box-shadow:inset 3px 0 0 var(--amber)}
+  .row.mark.benchrow{box-shadow:inset 3px 0 0 var(--green)}
+  .pill{flex:none;font:700 9.5px/1 var(--num);border-radius:6px;padding:4px 5px;white-space:nowrap}
+  .pill.down{color:var(--amber);background:var(--amber-soft);border:1px solid #eddcc0}
+  .pill.up{color:var(--green);background:var(--green-soft);border:1px solid #cfe3d6}
+
+  /* --- new: plan sheet --- */
+  .sheet2{position:absolute;left:0;right:0;bottom:0;max-height:78%;background:#fff;z-index:21;
+          border-radius:20px 20px 0 0;display:flex;flex-direction:column;overflow:hidden;
+          box-shadow:0 -10px 34px rgba(16,20,24,.22)}
+  .sheet2 .hdr{display:flex;align-items:baseline;justify-content:space-between;
+               padding:13px 16px 2px;flex:none}
+  .sheet2 .hdr .t{font:700 10px/1 var(--num);letter-spacing:.13em;text-transform:uppercase;color:var(--ink3)}
+  .sheet2 .hdr .w{font:600 10.5px/1 var(--num);color:var(--ink3)}
+  .sheet2 .sub{padding:3px 16px 0;font-size:11px;color:var(--ink3);flex:none}
+  .sheet2 .body{flex:0 1 auto;overflow:auto;padding-bottom:12px}
+  .sheet2 .foot{flex:none;padding:8px 14px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line2)}
+  .pcoll{display:flex;align-items:center;justify-content:space-between;margin:9px 8px 0;padding:9px 11px;
+         background:#fff;border:1px solid var(--line);border-radius:11px;font-size:12px;font-weight:600;color:var(--ink3)}
+  .pcoll .r{font:600 10px/1 var(--num);color:#a9a294}
+  .ptable td.now{background:#f2f8f3}
+  .ptable th.now{color:var(--green);background:#f2f8f3}
+  .ptable th.now::after{content:"NOW";display:block;font-size:7px;letter-spacing:.1em;margin-top:2px}
+  .legend{display:flex;align-items:center;gap:6px;padding:8px 16px 0;font-size:10.5px;color:var(--ink3)}
+  .legend .sw{width:10px;height:10px;border-radius:3px;background:#f2f8f3;border:1px solid #cfe3d6}
+</style></head>
+<body>
+<div class="stage">
+
+  <!-- ============ A: live + next-change strip ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow">
+          <button class="back">‹</button>
+          <span class="chip coach dot">Coach</span>
+          <button class="chip period">P2<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
+          <span class="grow"></span>
+          <span>Lunds BK</span>
+        </div>
+        <div class="scoreline">
+          <div class="clock">05:48<span class="of">/20:00</span></div>
+          <div class="score">1<span class="dash">–</span>0</div>
+        </div>
+        <div class="progress"><i style="width:29%"></i></div>
+      </header>
+
+      <div class="nxt">
+        <div style="flex:1">
+          <div class="l1"><span class="lab">Next change in</span><span class="cd">1:12</span></div>
+          <div class="chg"><b>Sam 7</b> → Omar 8 · <b>Hugo 3</b> → Isak 6</div>
+        </div>
+        <button class="apply">Apply</button>
+      </div>
+
+      <div class="view">
+        <div class="blocks">
+          <div class="blk on">00–07</div><div class="blk">07–14</div><div class="blk">14–20</div>
+        </div>
+        <div class="sechead"><span>On field (7)</span><span>MIN</span></div>
+        <div class="list">
+          <div class="row keeper"><span class="slot">G</span><button class="nm">Leo<span class="no">4</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">LB</span><button class="nm">Sam<span class="no">7</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">RB</span><button class="nm">Noah<span class="no">2</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">LM</span><button class="nm">Elis<span class="no">9</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">MM</span><button class="nm">Hugo<span class="no">3</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">RM</span><button class="nm">Axel<span class="no">5</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">F</span><button class="nm">Ville<span class="no">11</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+        </div>
+        <div class="sechead"><span>Bench (2)</span><span>MIN</span></div>
+        <div class="list">
+          <div class="row"><span class="slot">·</span><button class="nm">Omar<span class="no">8</span></button><span class="min">18.0</span><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">·</span><button class="nm">Isak<span class="no">6</span></button><span class="min">18.0</span><button class="rbtn">⇄</button></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn stop"><span class="ico">❚❚</span>Stop</button>
+        <button class="btn goala">Their goal</button>
+        <button class="btn undo">⟲</button>
+      </div>
+    </div></div>
+    <div class="cap"><b>A · Next-change strip</b>The plan's next change, with a countdown and one tap to apply.</div>
+  </div>
+
+  <!-- ============ B: live + row markers ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow">
+          <button class="back">‹</button>
+          <span class="chip coach dot">Coach</span>
+          <button class="chip period">P2<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
+          <span class="grow"></span>
+          <span>Lunds BK</span>
+        </div>
+        <div class="scoreline">
+          <div class="clock">05:48<span class="of">/20:00</span></div>
+          <div class="score">1<span class="dash">–</span>0</div>
+        </div>
+        <div class="progress"><i style="width:29%"></i></div>
+      </header>
+
+      <div class="nxt">
+        <div style="flex:1">
+          <div class="l1"><span class="lab">Next change in</span><span class="cd">1:12</span></div>
+          <div class="chg"><b>Sam 7</b> → Omar 8 · <b>Hugo 3</b> → Isak 6</div>
+        </div>
+        <button class="apply">Apply</button>
+      </div>
+
+      <div class="view">
+        <div class="blocks">
+          <div class="blk on">00–07</div><div class="blk">07–14</div><div class="blk">14–20</div>
+        </div>
+        <div class="sechead"><span>On field (7)</span><span>MIN</span></div>
+        <div class="list">
+          <div class="row keeper"><span class="slot">G</span><button class="nm">Leo<span class="no">4</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row mark"><span class="slot">LB</span><button class="nm">Sam<span class="no">7</span></button><span class="pill down">↓ Omar</span><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">RB</span><button class="nm">Noah<span class="no">2</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">LM</span><button class="nm">Elis<span class="no">9</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row mark"><span class="slot">MM</span><button class="nm">Hugo<span class="no">3</span></button><span class="pill down">↓ Isak</span><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">RM</span><button class="nm">Axel<span class="no">5</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+          <div class="row"><span class="slot">F</span><button class="nm">Ville<span class="no">11</span></button><span class="min">25.8</span><button class="rbtn goal">⚽</button><button class="rbtn">⇄</button></div>
+        </div>
+        <div class="sechead"><span>Bench (2)</span><span>MIN</span></div>
+        <div class="list">
+          <div class="row benchrow mark"><span class="slot">·</span><button class="nm">Omar<span class="no">8</span></button><span class="pill up">↑ Sam</span><span class="min">18.0</span><button class="rbtn">⇄</button></div>
+          <div class="row benchrow mark"><span class="slot">·</span><button class="nm">Isak<span class="no">6</span></button><span class="pill up">↑ Hugo</span><span class="min">18.0</span><button class="rbtn">⇄</button></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn stop"><span class="ico">❚❚</span>Stop</button>
+        <button class="btn goala">Their goal</button>
+        <button class="btn undo">⟲</button>
+      </div>
+    </div></div>
+    <div class="cap"><b>B · Strip + row markers</b>Who is affected, on the row itself: ↓ off, ↑ on, colour <i>and</i> arrow.</div>
+  </div>
+
+  <!-- ============ C: plan sheet ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow">
+          <button class="back">‹</button>
+          <span class="chip coach dot">Coach</span>
+          <button class="chip period">P2<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
+          <span class="grow"></span>
+          <span>Lunds BK</span>
+        </div>
+        <div class="scoreline">
+          <div class="clock">05:48<span class="of">/20:00</span></div>
+          <div class="score">1<span class="dash">–</span>0</div>
+        </div>
+        <div class="progress"><i style="width:29%"></i></div>
+      </header>
+
+      <div class="nxt">
+        <div style="flex:1">
+          <div class="l1"><span class="lab">Next change in</span><span class="cd">1:12</span></div>
+          <div class="chg"><b>Sam 7</b> → Omar 8 · <b>Hugo 3</b> → Isak 6</div>
+        </div>
+        <button class="apply">Apply</button>
+      </div>
+
+      <div class="view"></div>
+
+      <div class="scrim"></div>
+      <div class="sheet2">
+        <div class="grab"></div>
+        <div class="hdr"><span class="t">Plan</span><span class="w">P2 · 05:48</span></div>
+        <div class="sub">P16 A · 3 × 20 · read-only during play</div>
+        <div class="body">
+          <div class="pcoll"><span>Period 1 · played</span><span class="r">3 blocks ✓</span></div>
+
+          <div class="phead2">Period 2<span>00–20</span></div>
+          <div class="ptable"><table>
+            <tr><th></th><th class="now">00–07</th><th>07–14</th><th>14–20</th></tr>
+            <tr><td class="lbl">G</td><td class="cell gk now">Leo</td><td class="cell gk">Leo</td><td class="cell gk">Leo</td></tr>
+            <tr><td class="lbl">LB</td><td class="cell now">Sam</td><td class="cell">Omar</td><td class="cell">Sam</td></tr>
+            <tr><td class="lbl">RB</td><td class="cell now">Noah</td><td class="cell">Noah</td><td class="cell">Omar</td></tr>
+            <tr><td class="lbl">LM</td><td class="cell now">Elis</td><td class="cell">Elis</td><td class="cell">Isak</td></tr>
+            <tr><td class="lbl">MM</td><td class="cell now">Hugo</td><td class="cell">Isak</td><td class="cell">Hugo</td></tr>
+            <tr><td class="lbl">RM</td><td class="cell now">Axel</td><td class="cell">Axel</td><td class="cell">Axel</td></tr>
+            <tr><td class="lbl">F</td><td class="cell now">Ville</td><td class="cell">Ville</td><td class="cell">Ville</td></tr>
+            <tr class="bench"><td class="lbl">Bench</td><td class="cell now">Omar, Isak</td><td class="cell">Sam, Hugo</td><td class="cell">Noah, Elis</td></tr>
+          </table></div>
+
+          <div class="pcoll"><span>Period 3 · 3 blocks</span><span class="r">2 changes ▸</span></div>
+          <div class="legend"><span class="sw"></span>Current block — you are here</div>
+        </div>
+        <div class="foot"><button class="btn wide">Close</button></div>
+      </div>
+    </div></div>
+    <div class="cap"><b>C · Plan sheet</b>One tap from the live header. Read-only, current block highlighted.</div>
+  </div>
+
+</div>
+</body></html>
