@@ -356,6 +356,34 @@ async function main() {
   await sleep(400);
   ok('applying the overdue change clears it', (await evaluate("!!document.querySelector('.nxt.late')")) === false);
 
+  console.log('reopen a finished match from history');
+  await click('[data-act="home"]');
+  await sleep(300);
+  await click('[data-act="tab:history"]');
+  await sleep(300);
+  const rows = await evaluate("document.querySelectorAll('.matchrow[data-act^=\"openrecap\"]').length");
+  ok('history lists finished matches', rows >= 1, String(rows));
+  const historyOpp = await text('.matchrow .opp');
+  const historyScore = await text('.matchrow .sc');
+
+  await click('.matchrow[data-act^="openrecap"]');
+  await sleep(350);
+  ok('the recap reopens from history', await evaluate("!!document.querySelector('[data-act^=\"sharepast\"]')"));
+  ok('it is the same match', (await text('header')).includes(historyOpp.trim()),
+    `${await text('header')} vs ${historyOpp}`);
+  ok('with the same score', (await text('body')).includes(historyScore.trim()), historyScore);
+  ok('and the minutes table', await evaluate("!!document.querySelector('.card .ln .nm2')"));
+
+  await click('[data-act="closerecap"]');
+  await sleep(300);
+  ok('closing returns to history, not the match',
+    await evaluate("!!document.querySelector('[data-act=\"tab:history\"]')"));
+
+  await click('[data-act="tab:match"]');
+  await sleep(250);
+  ok('a live match is still resumable afterwards',
+    await evaluate("!!document.querySelector('[data-act=\"resume\"]')"));
+
   ws.close();
 }
 

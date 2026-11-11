@@ -27,14 +27,19 @@ const s = {
   tab: 'match',
   creating: false,
   editingTeam: null,
+  recapId: null,
 };
 
-function config() {
+function matchConfig(m) {
   return {
-    periodCount: s.match?.periodCount ?? 3,
-    periodMinutes: s.match?.periodMinutes ?? 20,
-    blockMinutes: s.match?.blockMinutes ?? 7,
+    periodCount: m?.periodCount ?? 3,
+    periodMinutes: m?.periodMinutes ?? 20,
+    blockMinutes: m?.blockMinutes ?? 7,
   };
+}
+
+function config() {
+  return matchConfig(s.match);
 }
 
 function proj() {
@@ -165,6 +170,9 @@ function routeNow() {
   if (!s.team || !s.team.players?.length) return 'setup';
   if (s.creating) return 'setup';
   if (s.route === 'team' && s.editingTeam) return 'team';
+  // An opened recap outranks "home": you got there by tapping a match on the
+  // History tab, so it must not be swallowed by the earlier route.
+  if (s.recapId) return 'recap';
   if (s.route === 'home') return 'setup';
   if (!s.match) return 'setup';
   if (s.match.status === 'live') return 'live';
@@ -187,7 +195,7 @@ function render() {
   if (route === 'live') app.innerHTML = viewLive();
   else if (route === 'team') app.innerHTML = viewTeam();
   else if (route === 'plan') app.innerHTML = viewPlan();
-  else if (route === 'recap') app.innerHTML = viewRecap();
+  else if (route === 'recap') app.innerHTML = viewRecap(s.recapId ? store.loadMatch(s.recapId) : null);
   else app.innerHTML = viewSetup();
 
   if (s.sheet) app.insertAdjacentHTML('beforeend', renderSheet());
@@ -550,11 +558,12 @@ function historyCard() {
   return `<div class="card"><h3>${T('tabHistory')}</h3>${all.slice().reverse().map((m) => {
     const evs = store.loadEvents(m.id);
     const p = project(evs, m, Date.now());
-    return `<div class="matchrow">
+    return `<button class="matchrow" data-act="openrecap:${m.id}">
       <span class="dt">${esc((m.kickoff || '').slice(5)) || '—'}</span>
       <span class="opp">${esc(m.opponent || '—')}</span>
       <span class="sc">${p.score.for}–${p.score.against}</span>
-    </div>`;
+      <span style="color:var(--ink3);font-size:17px;line-height:1">›</span>
+    </button>`;
   }).join('')}</div>`;
 }
 
@@ -934,10 +943,13 @@ function slotOfPlayer(p, id) {
  * Recap
  * ------------------------------------------------------------------ */
 
-function recapText() {
-  const p = proj();
+function recapText(pastMatch = null) {
+  const m = pastMatch || s.match;
+  const p = pastMatch
+    ? project(store.loadEvents(pastMatch.id), matchConfig(pastMatch), Date.now())
+    : proj();
   const goals = p.timeline.filter((e) => e.type === 'goal_for');
-  const lines = [`${s.team.name} – ${s.match.opponent || ''}  ${p.score.for}–${p.score.against}`];
+  const lines = [`${s.team.name} – ${m.opponent || ''}  ${p.score.for}–${p.score.against}`];
   if (goals.length) {
     lines.push(goals.map((g) => {
       const who = player(g.payload.scorer).name;
@@ -952,13 +964,20 @@ function recapText() {
   return lines.join('\n');
 }
 
-function viewRecap() {
-  const p = proj();
+function viewRecap(pastMatch = null) {
+  const m = pastMatch || s.match;
+  const p = pastMatch
+    ? project(store.loadEvents(pastMatch.id), matchConfig(pastMatch), Date.now())
+    : proj();
+  const c = matchConfig(m);
   const goals = p.timeline.filter((e) => e.type === 'goal_for');
   const mins = Object.values(p.players).sort((a, b) => b.playMs - a.playMs);
-  const expected = 7 * config().periodCount * config().periodMinutes * MIN;
+  // The invariant is Σ minutes = 7 × time actually played. Comparing to the
+  // nominal 7 × 60 only holds for a full match, and reads as an error when a
+  // match ended early.
+  const expected = 7 * (p.totalRunningMs || 0);
   const total = mins.reduce((a, x) => a + x.playMs, 0);
-  const balanced = Math.abs(total - expected) < MIN * 0.15;
+  const balanced = Math.abs(total - expected) < MIN * 0.05;
 
   const goalRows = goals.map((g) => `<div class="matchrow">
       <span class="dt">${mmss(g.clockMs || 0)}</span>
@@ -968,11 +987,22 @@ function viewRecap() {
 
   const minRows = mins.map((x) => `<div class="ln">
       <span class="nm2">${esc(player(x.id).name)}</span>
-      <span class="track"><i class="${x.playMs >= 46 * MIN ? 'hi' : ''}" style="width:${(x.playMs / (config().periodCount * config().periodMinutes * MIN) * 100).toFixed(1)}%"></i></span>
+      <span class="track"><i class="${x.playMs >= 46 * MIN ? 'hi' : ''}" style="width:${(x.playMs / (c.periodCount * c.periodMinutes * MIN) * 100).toFixed(1)}%"></i></span>
       <span class="v">${fmtMin(x.playMs)}</span>
     </div>`).join('');
 
-  return headerPlain(T('recap'), s.match?.opponent || '', `<span class="chip period">${T('fullTime')}</span>`)
+  return `<header>
+      <div class="toprow">
+        <button class="back" data-act="closerecap" aria-label="${T('close')}">‹</button>
+        <span>${T('recap')}</span>
+        <span class="grow"></span>
+        <span class="chip period">${T('fullTime')}</span>
+      </div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+        <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">${esc(m?.opponent || '')}</div>
+        ${pastMatch?.kickoff ? `<span style="font:600 11px/1 var(--num);color:var(--ink3)">${esc(pastMatch.kickoff)}</span>` : ''}
+      </div>
+    </header>`
     + `<div class="view">
       <div class="setup" style="gap:10px">
         <div class="card">
@@ -982,19 +1012,19 @@ function viewRecap() {
         ${goals.length ? `<div class="card"><h3>${T('goals')}</h3>${goalRows}</div>` : ''}
         <div class="card"><h3>${T('minutes')}</h3>
           <div class="fc" style="margin:0;border:0">${minRows}</div>
-          <div class="note" style="margin:8px 0 0">Σ ${fmtMin(total)} = 7 × ${config().periodCount * config().periodMinutes}
+          <div class="note" style="margin:8px 0 0">Σ ${fmtMin(total)} = 7 × ${fmtMin(p.totalRunningMs || 0)}
             <span style="color:${balanced ? 'var(--green)' : 'var(--red)'}">${balanced ? '✔' : '≠'}</span></div>
         </div>
       </div>
     </div>
     <div class="actions">
-      <button class="btn wide" data-act="done">${T('done')}</button>
-      <button class="btn primary" data-act="share">${T('share')}</button>
+      <button class="btn wide" data-act="${pastMatch ? 'closerecap' : 'done'}">${T('done')}</button>
+      <button class="btn primary" data-act="${pastMatch ? `sharepast:${pastMatch.id}` : 'share'}">${T('share')}</button>
     </div>`;
 }
 
-async function share() {
-  const text = recapText();
+async function share(pastMatch = null) {
+  const text = recapText(pastMatch);
   try {
     if (navigator.share) await navigator.share({ text });
     else if (navigator.clipboard) { await navigator.clipboard.writeText(text); showToast('✓ copied', null); }
@@ -1158,10 +1188,10 @@ function handle(ev) {
   switch (action) {
     case 'noop': return;
 
-    case 'tab': s.tab = a; render(); return;
+    case 'tab': s.tab = a; s.toast = null; render(); return;
     case 'lang': switchLang(); return;
     case 'nav': s.route = a === 'plan' ? 'plan' : null; render(); return;
-    case 'home': s.route = 'home'; s.tab = 'match'; s.sheet = null; render(); return;
+    case 'home': s.route = 'home'; s.tab = 'match'; s.sheet = null; s.toast = null; render(); return;
     case 'resume': {
       const live = store.listMatches().find((m) => m.status === 'live');
       if (live) selectMatch(live);
@@ -1244,7 +1274,15 @@ function handle(ev) {
       act('period_end', { period: p.period });
       s.sheet = null; render(); return;
     }
-    case 'done': s.route = 'setup'; s.sheet = null; render(); return;
+    case 'done': s.route = 'setup'; s.sheet = null; s.toast = null; render(); return;
+    case 'openrecap': s.recapId = a; s.sheet = null; s.toast = null; render(); return;
+    case 'closerecap': {
+      const fromHistory = !!s.recapId;
+      s.recapId = null;
+      s.route = 'home';
+      if (fromHistory) s.tab = 'history';
+      render(); return;
+    }
     case 'sheet': s.sheet = null; render(); return;
 
     case 'creatematch': if (form) createMatch(form); return;
@@ -1361,6 +1399,7 @@ function handle(ev) {
       render(); return;
     }
     case 'share': share(); return;
+    case 'sharepast': share(store.loadMatch(a)); return;
 
     default: return;
   }
