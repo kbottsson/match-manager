@@ -93,7 +93,29 @@ async function main() {
 
   await booted();
 
+  // ---- 0. a fresh install has no club at all -----------------------------
+  console.log('fresh install');
+  ok('empty install offers to start a season',
+    (await evaluate("!!document.querySelector('[data-act=\"startseason\"]')")) === true);
+  await click('[data-act="startseason"]');
+  await sleep(300);
+  ok('the season sheet asks for a club name when there is no club',
+    (await evaluate("!!document.querySelector('#newclubname')")) === true);
+  await evaluate(`(() => { document.querySelector('#newclubname').value = 'Testklubb IF'; return 1 })()`);
+  await click('[data-act="createseason"]');
+  await sleep(450);
+  ok('create actually creates a season on a fresh install',
+    (await evaluate("!!document.querySelector('.sheet')")) === false);
+  ok('the club appears in the picker', (await text('.picker .pbtn')).includes('Testklubb IF'),
+    await text('.picker .pbtn'));
+  ok('and the roster is ready to fill',
+    (await evaluate("!!document.querySelector('#playerform')")) === true);
+
   // ---- 1. legacy data, exactly as the previous build wrote it -------------
+  await evaluate('localStorage.clear()');
+  await evaluate('location.reload()');
+  await sleep(900);
+  await booted();
   console.log('migration from the single-team build');
   const players = [
     ['Leo', 4], ['Sam', 7], ['Noah', 2], ['Elis', 9], ['Hugo', 3],

@@ -961,6 +961,8 @@ function renderSheet() {
     const year = from ? from.year + 1 : new Date().getFullYear();
     return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
       <div class="grab"></div><h2>${T('startSeasonYear', { year })}<span class="when">${esc(club().name)}</span></h2>
+      ${s.clubs.length ? '' : `<div class="field"><label>${T('clubName')}</label>
+        <input id="newclubname" placeholder="Uppåkra P16" autocomplete="off"></div>`}
       ${from ? `<div class="q">${T('carriedFrom', { year: from.year })}</div>` : ''}
       <div>
         <div class="crow"><span class="cl">${carry.length === 1 ? T('playersOne') : T('playersN', { n: carry.length })}</span>
@@ -1284,23 +1286,36 @@ function saveClubName(name) {
 
 /** Enter a season: closes the open one and carries the roster and teams over. */
 function createSeason() {
+  // A season needs a club. On a fresh install there isn't one yet, so create it
+  // here rather than failing silently behind a button that appears to do nothing.
+  let cid = club().id;
+  if (!cid) {
+    const el = document.querySelector('#newclubname');
+    const name = String(el?.value || '').trim() || T('myClub');
+    const fresh = { id: uid(), name };
+    s.clubs.push(fresh);
+    s.clubId = fresh.id;
+    cid = fresh.id;
+  }
+
   const from = selectedSeason() || openSeason();
-  const cid = club().id || (from && seasonById(from.id)?.clubId);
-  if (!cid) return;
   const mine = s.seasons.filter((x) => x.clubId === cid);
-  const year = from ? from.year + 1 : new Date().getFullYear();
+  let year = from && from.clubId === cid ? from.year + 1 : new Date().getFullYear();
+  while (mine.some((x) => x.year === year)) year += 1; // never two of the same year
 
   for (const x of mine) if (!x.closed) x.closed = true;
 
   const season = { id: uid(), clubId: cid, year, closed: false };
   s.seasons.push(season);
 
-  const carry = from ? rosterOf(from.id).filter((pl) => pl.status !== 'left') : [];
+  const carry = from && from.clubId === cid
+    ? rosterOf(from.id).filter((pl) => pl.status !== 'left')
+    : [];
   for (const pl of carry) {
     if (entryFor(pl.id, season.id)) continue;
     s.entries.push({ personId: pl.id, seasonId: season.id, no: pl.no, status: 'active' });
   }
-  if (from) {
+  if (carry.length) {
     for (const t of teamsOf(from.id)) {
       s.teams.push({
         id: uid(), seasonId: season.id, name: t.name,
@@ -1308,6 +1323,7 @@ function createSeason() {
       });
     }
   }
+
   persistModel();
   s.seasonId = season.id;
   s.sheet = null;
