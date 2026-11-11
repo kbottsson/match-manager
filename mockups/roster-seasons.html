@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Match Manager — roster across seasons</title>
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body{background:#e7e3da;padding:26px 22px 30px}
+  .stage{display:flex;gap:22px;justify-content:center;align-items:flex-start}
+  .col{width:390px}
+  .cap{margin:10px 2px 0;font:600 10px/1.4 -apple-system,sans-serif;letter-spacing:.09em;
+       text-transform:uppercase;color:#7d7568}
+  .cap b{display:block;color:#101418;font-size:12.5px;letter-spacing:-.01em;text-transform:none;margin-bottom:2px}
+  .phone{width:390px;height:844px;background:var(--bg);border-radius:26px;overflow:hidden;
+         position:relative;box-shadow:0 10px 34px rgba(20,24,28,.16),0 0 0 1px rgba(20,24,28,.07)}
+  .phone .app{height:100%}
+
+  /* --- the picker: club and season are one control --- */
+  .picker{display:flex;gap:6px;padding:10px 14px 0}
+  .pbtn{flex:1;display:flex;align-items:center;justify-content:space-between;gap:6px;height:36px;
+        padding:0 11px;border-radius:9px;background:#f1ede5;font-size:13px;font-weight:600;
+        color:var(--ink);letter-spacing:-.01em}
+  .pbtn .cv{opacity:.45;font-size:10px;line-height:1}
+  .pbtn.season{flex:.62}
+  .pbtn:active{background:#e9e4d9}
+
+  /* --- read-only banner --- */
+  .lockbar{display:flex;align-items:center;gap:8px;margin:10px 14px 0;padding:8px 10px;
+           border-radius:11px;background:var(--amber-soft);border:1px solid #f0e2c9;
+           font-size:11px;line-height:1.35;color:var(--ink2)}
+  .lockbar .i{font-size:13px}
+  .lockbar button{margin-left:auto;flex:none;background:#fff;border:1px solid #e8d9be;
+                  border-radius:7px;padding:5px 8px;font-size:10.5px;font-weight:700;color:var(--amber)}
+
+  /* --- rows --- */
+  .prow{display:flex;align-items:center;gap:9px;width:100%;min-height:46px;padding:0 2px;
+        border-bottom:1px solid var(--line2);text-align:left}
+  .prow:last-child{border-bottom:0}
+  .prow .no{font:600 12px/1 var(--num);color:var(--ink3);width:24px;flex:none}
+  .prow .nm{flex:1;font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .prow .cv{color:#c3bcae;font-size:15px;line-height:1;flex:none}
+  .prow.gone .nm{color:var(--ink3);font-weight:500}
+  .prow.gone .no{opacity:.6}
+  .tag{flex:none;font:600 9px/1 var(--num);letter-spacing:.04em;color:#8a8172;background:#efeae1;
+       border-radius:5px;padding:3px 5px}
+  .sechead2{display:flex;align-items:center;justify-content:space-between;padding:14px 2px 2px;
+            font:700 9.5px/1 var(--num);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
+  .foot-note{padding:12px 14px 0;font-size:11px;line-height:1.45;color:var(--ink3)}
+
+  /* --- season sheet --- */
+  .ytab{display:flex;align-items:center;gap:9px;width:100%;padding:11px 12px;border-radius:10px;
+        background:#fff;border:1px solid var(--line);margin-bottom:6px;text-align:left}
+  .ytab .yr{font:700 16px/1 var(--num)}
+  .ytab .sub{font-size:11px;color:var(--ink3);margin-top:2px}
+  .ytab .tick{margin-left:auto;color:var(--green);font-weight:700}
+  .ytab.off .yr{color:var(--ink3)}
+  .startnew{display:flex;align-items:center;gap:9px;width:100%;padding:11px 12px;border-radius:10px;
+            background:var(--green-soft);border:1px dashed #bcd6c4;text-align:left}
+  .startnew .plus{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;
+                  font-weight:700;line-height:22px;text-align:center;flex:none}
+  .startnew .t{font-size:13px;font-weight:700;color:var(--green)}
+  .startnew .s{font-size:11px;color:#4b7a5c;margin-top:1px}
+  .crow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:46px;
+        border-bottom:1px solid var(--line2)}
+  .crow:last-child{border-bottom:0}
+  .crow .cl{font-size:14px;font-weight:600;letter-spacing:-.01em}
+  .crow.gone .cl{color:var(--ink3);font-weight:500}
+  .tag.ok{background:var(--green-soft);color:var(--green)}
+</style></head>
+<body>
+<div class="stage">
+
+  <!-- ============ A: active season ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow"><span>Match Manager</span><span class="grow"></span><span>Coach</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+          <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Roster</div>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <div class="tab">Match</div><div class="tab on">Roster</div><div class="tab">Teams</div><div class="tab">History</div>
+      </div>
+
+      <div class="picker">
+        <button class="pbtn">Uppåkra IF<span class="cv">▾</span></button>
+        <button class="pbtn season">2026<span class="cv">▾</span></button>
+      </div>
+
+      <div class="view" style="padding:12px 14px 0">
+        <div class="card">
+          <h3>Players · 9</h3>
+          <div class="prow"><span class="no">4</span><span class="nm">Leo</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">7</span><span class="nm">Sam</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">2</span><span class="nm">Noah</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">9</span><span class="nm">Elis</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">3</span><span class="nm">Hugo</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">5</span><span class="nm">Axel</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">11</span><span class="nm">Ville</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">8</span><span class="nm">Omar</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">6</span><span class="nm">Isak</span><span class="cv">›</span></div>
+
+          <div class="sechead2"><span>Archived · 1</span></div>
+          <div class="prow gone"><span class="no">14</span><span class="nm">Erik</span>
+            <span class="tag">LEFT 12 MAY</span><span class="cv">›</span></div>
+        </div>
+
+        <form style="margin-top:12px">
+          <div class="rowline">
+            <div class="field" style="flex:2"><label>Player</label><input placeholder="Leo" value=""></div>
+            <div class="field" style="flex:1"><label>No.</label><input placeholder="4"></div>
+          </div>
+          <button class="btn wide" type="button">+ Add player to 2026</button>
+        </form>
+        <div class="foot-note">Archiving hides a player from squad picks right away. Their
+          matches keep their minutes.</div>
+      </div>
+    </div></div>
+    <div class="cap"><b>A · Active season</b>Club and year together at the top. Editable, because it's the season you're in.</div>
+  </div>
+
+  <!-- ============ B: past season ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow"><span>Match Manager</span><span class="grow"></span><span>Coach</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+          <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Roster</div>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <div class="tab">Match</div><div class="tab on">Roster</div><div class="tab">Teams</div><div class="tab">History</div>
+      </div>
+
+      <div class="picker">
+        <button class="pbtn">Uppåkra IF<span class="cv">▾</span></button>
+        <button class="pbtn season">2025<span class="cv">▾</span></button>
+      </div>
+
+      <div class="lockbar"><span class="i">🔒</span>
+        <span><b>2025 is closed.</b> Read-only.</span>
+        <button>Unlock</button></div>
+
+      <div class="view" style="padding:12px 14px 0">
+        <div class="card">
+          <h3>Players · 8</h3>
+          <div class="prow"><span class="no">4</span><span class="nm">Leo</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">7</span><span class="nm">Sam</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">2</span><span class="nm">Noah</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">3</span><span class="nm">Hugo</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">5</span><span class="nm">Axel</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">11</span><span class="nm">Ville</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">8</span><span class="nm">Omar</span><span class="cv">›</span></div>
+          <div class="prow"><span class="no">6</span><span class="nm">Isak</span><span class="cv">›</span></div>
+
+          <div class="sechead2"><span>Archived · 2</span></div>
+          <div class="prow gone"><span class="no">14</span><span class="nm">Erik</span>
+            <span class="tag">LEFT 04 SEP</span><span class="cv">›</span></div>
+          <div class="prow gone"><span class="no">10</span><span class="nm">Milan</span>
+            <span class="tag">LEFT 21 JUN</span><span class="cv">›</span></div>
+        </div>
+        <div class="foot-note">Names, numbers and minutes on this screen are the season as it
+          was played. Tapping a player still opens their record.</div>
+      </div>
+    </div></div>
+    <div class="cap"><b>B · Past season</b>Same screen, closed. No add form, no archive buttons, one deliberate way in.</div>
+  </div>
+
+  <!-- ============ C: season picker ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow"><span>Match Manager</span><span class="grow"></span><span>Coach</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+          <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Roster</div>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <div class="tab">Match</div><div class="tab on">Roster</div><div class="tab">Teams</div><div class="tab">History</div>
+      </div>
+
+      <div class="picker">
+        <button class="pbtn">Uppåkra IF<span class="cv">▾</span></button>
+        <button class="pbtn season">2026<span class="cv">▾</span></button>
+      </div>
+
+      <div class="view"></div>
+
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <h2>Season<span class="when">Uppåkra IF</span></h2>
+
+        <button class="ytab"><span><span class="yr">2026</span>
+          <div class="sub">9 players · 2 teams</div></span><span class="tick">✓</span></button>
+        <button class="ytab off"><span><span class="yr">2025</span>
+          <div class="sub">8 players · closed</div></span></button>
+
+        <div style="height:12px"></div>
+        <button class="startnew"><span class="plus">+</span>
+          <span><div class="t">Start 2027 from 2026</div>
+          <div class="s">9 players · 2 teams carried over</div></span></button>
+
+        <button class="sheetclose">Cancel</button>
+      </div>
+    </div></div>
+    <div class="cap"><b>C · Season picker</b>Years you have, plus the one you don't — starting a season is a first-class action, not a settings screen.</div>
+  </div>
+
+  <!-- ============ D: start a season ============ -->
+  <div class="col">
+    <div class="phone"><div class="app">
+      <header>
+        <div class="toprow"><span>Match Manager</span><span class="grow"></span><span>Coach</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
+          <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">Roster</div>
+        </div>
+      </header>
+
+      <div class="tabs">
+        <div class="tab">Match</div><div class="tab on">Roster</div><div class="tab">Teams</div><div class="tab">History</div>
+      </div>
+
+      <div class="picker">
+        <button class="pbtn">Uppåkra IF<span class="cv">▾</span></button>
+        <button class="pbtn season">2026<span class="cv">▾</span></button>
+      </div>
+
+      <div class="view"></div>
+
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <h2>Start 2027<span class="when">Uppåkra IF</span></h2>
+        <div class="q">Carried from 2026</div>
+        <div style="margin-top:2px">
+          <div class="crow"><span class="cl">9 players</span><span class="tag ok">NUMBERS KEPT</span></div>
+          <div class="crow"><span class="cl">2 teams</span><span class="tag ok">P16 A · P16 B</span></div>
+          <div class="crow gone"><span class="cl">Erik — left 12 May</span><span class="tag">NOT CARRIED</span></div>
+        </div>
+        <div class="qsub" style="margin-top:10px">Numbers carry over. You can change them before
+          the first match. Nothing is deleted.</div>
+        <button class="btn primary" style="width:100%;margin-top:12px">Create 2027</button>
+        <button class="sheetclose">Cancel</button>
+      </div>
+    </div></div>
+    <div class="cap"><b>D · Starting a season</b>Shows exactly what comes across — and what doesn't — before it happens.</div>
+  </div>
+
+</div>
+</body></html>
