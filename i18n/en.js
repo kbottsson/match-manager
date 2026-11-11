@@ -86,6 +86,14 @@ export default {
 
   // misc
   language: 'Svenska',
+  season: 'Season', closed: 'closed', open: 'open', unlock: 'Unlock', lock: 'Lock',
+  archived: 'Archived', left: 'left', leftOn: 'left {d}', archive: 'Archive', restore: 'Restore',
+  confirmArchive: 'Archive this player? Their matches keep their minutes.',
+  startSeason: 'Start a season', startSeasonYear: 'Start {year}', carriedFrom: 'carried from {year}',
+  numbersKept: 'numbers kept', teamsN: '{n} teams', notCarried: 'not carried',
+  createSeason: 'Create {year}', seasonCreated: '{year} created',
+  addPlayerTo: 'Add player to {year}', noSeason: 'No season yet',
+  newSeasonNote: 'Numbers carry over. You can change them before the first match. Nothing is deleted.',
   nextChangeIn: 'Next change in', apply: 'Apply', now: 'Now',
   played: 'played', blocksN: '{n} blocks', readOnlyPlay: 'read-only during play',
   youAreHere: 'Current block', applied: '{n} changes applied',

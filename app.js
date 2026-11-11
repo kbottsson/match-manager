@@ -28,6 +28,14 @@ const s = {
   creating: false,
   editingTeam: null,
   recapId: null,
+  clubs: [],
+  seasons: [],
+  people: [],
+  entries: [],
+  teams: [],
+  clubId: null,
+  seasonId: null,
+  unlocked: new Set(),
 };
 
 function matchConfig(m) {
@@ -56,20 +64,71 @@ const P = (slot, field) => posLabel(slot, field);
 function boot() {
   s.lang = store.loadLang() || detectLang();
   setLang(s.lang);
-  s.team = store.loadTeam();
-  const matches = store.listMatches();
-  // Migration: an existing roster with no teams becomes one team holding everyone.
-  if (s.team?.players?.length && !store.loadTeams().length) {
-    store.saveTeams([{ id: 't-default', name: s.team.name || 'Team 1',
-      playerIds: s.team.players.map((p) => p.id) }]);
-  }
+  migrateToSeasons();
   // Land on the live match only; everything else is opened from the list.
+  const matches = store.listMatches();
   s.match = matches.find((m) => m.status === 'live') || null;
   if (s.match) {
     s.plan = store.loadPlan(s.match.id);
     s.events = store.loadEvents(s.match.id);
   }
   document.documentElement.lang = s.lang;
+}
+
+function persistModel() {
+  store.saveClubs(s.clubs);
+  store.saveSeasons(s.seasons);
+  store.savePeople(s.people);
+  store.saveEntries(s.entries);
+  store.saveTeams(s.teams);
+}
+
+/**
+ * One-time, lossless move from the single-team world to clubs / seasons.
+ * Everything already on the device lands in the open season with the same ids,
+ * so every existing match, plan and event keeps pointing at the same people.
+ */
+function migrateToSeasons() {
+  s.clubs = store.loadClubs();
+  s.seasons = store.loadSeasons();
+  s.people = store.loadPeople();
+  s.entries = store.loadEntries();
+  s.teams = store.loadTeams();
+  s.clubId = s.clubs[0]?.id || null;
+  s.seasonId = openSeason()?.id || s.seasons[0]?.id || null;
+  if (s.clubs.length) return;
+
+  const legacy = store.loadTeam();
+  if (!legacy?.players?.length) return;
+
+  const matches = store.listMatches();
+  const years = matches
+    .map((m) => Number(String(m.kickoff || '').slice(0, 4)))
+    .filter((y) => y > 2000);
+  const year = years.length ? Math.max(...years) : new Date().getFullYear();
+
+  const club = { id: uid(), name: legacy.name || 'My club' };
+  const season = { id: uid(), clubId: club.id, year, closed: false };
+  s.clubs = [club];
+  s.seasons = [season];
+  s.people = legacy.players.map((pl) => ({ id: pl.id, name: pl.name }));
+  s.entries = legacy.players.map((pl) => ({
+    personId: pl.id, seasonId: season.id, no: pl.no || '', status: 'active',
+  }));
+
+  const old = store.loadTeams();
+  const seedTeams = old.length
+    ? old.map((t) => ({ id: t.id, name: t.name, personIds: t.playerIds || [] }))
+    : [{ id: uid(), name: 'Team 1', personIds: legacy.players.map((pl) => pl.id) }];
+  s.teams = seedTeams.map((t) => ({ ...t, seasonId: season.id }));
+
+  for (const m of matches) {
+    if (!m.seasonId) store.saveMatch({ ...m, seasonId: season.id });
+  }
+
+  persistModel();
+  s.clubId = club.id;
+  s.seasonId = season.id;
 }
 
 function switchLang() {
@@ -162,12 +221,17 @@ const mmss = (ms) => {
   const total = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 };
-const player = (id) => s.team?.players.find((p) => p.id === id) || { id, name: '?', no: '' };
+const player = (id) => {
+  const person = personById(id);
+  if (!person) return { id, name: '?', no: '' };
+  const no = entryFor(id, matchSeasonId())?.no || '';
+  return { id, name: person.name, no };
+};
 
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function routeNow() {
-  if (!s.team || !s.team.players?.length) return 'setup';
+  if (!s.clubs.length || !s.people.length) return 'setup';
   if (s.creating) return 'setup';
   if (s.route === 'team' && s.editingTeam) return 'team';
   // An opened recap outranks "home": you got there by tapping a match on the
@@ -199,8 +263,13 @@ function render() {
   else app.innerHTML = viewSetup();
 
   if (s.sheet) app.insertAdjacentHTML('beforeend', renderSheet());
-  if (s.toast) app.insertAdjacentHTML('beforeend', `<div class="toast">${s.toast.html}
-    <button data-act="undo:${s.toast.evId}">${T('undo')}</button></div>`);
+  // A toast belongs to the screen underneath, never on top of a sheet, and the
+  // Undo must only exist when there is something to undo.
+  if (s.toast && !s.sheet) {
+    const undo = s.toast.evId
+      ? `<button data-act="undo:${s.toast.evId}">${T('undo')}</button>` : '';
+    app.insertAdjacentHTML('beforeend', `<div class="toast">${s.toast.html}${undo}</div>`);
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -270,7 +339,7 @@ function nextChange(p) {
   if (i < 0) i = blocks.length - 1;
   const cur = blocks[i];
   const nxt = blocks[i + 1];
-  const known = new Set(s.team.players.map((pl) => pl.id));
+  const known = new Set(s.people.map((pl) => pl.id));
 
   // Still owed for the block we are in? Only if you have not moved on yet —
   // i.e. the pitch is still the previous block's lineup. Applying early puts a
@@ -338,7 +407,7 @@ function headerLive(p, showScore = true) {
       <button class="chip period" data-act="periodsheet">${T('periodN', { n: p.period })}<span style="font-size:11px;opacity:.65;margin-left:1px">▾</span></button>
       <button class="chip period" data-act="plansheet">${T('plan')}</button>
       <span class="grow"></span>
-      <span>${esc(s.match?.opponent || s.team.name)}</span>
+      <span>${esc(s.match?.opponent || club().name)}</span>
     </div>
     <div class="scoreline">
       <div class="clock${late ? ' late' : ''}" data-clock>
@@ -367,13 +436,17 @@ function viewSetup() {
   const tabs = [['match', T('tabMatch')], ['squad', T('tabSquad')], ['teams', T('tabTeams')], ['history', T('tabHistory')]]
     .map(([k, label]) => `<button class="tab${s.tab === k ? ' on' : ''}" data-act="tab:${k}">${label}</button>`)
     .join('');
-  const body = s.tab === 'squad' ? squadCard()
+  const seasonScoped = ['squad', 'teams', 'history'].includes(s.tab);
+  const body = s.tab === 'squad' ? rosterTab()
     : s.tab === 'teams' ? teamsTab()
     : s.tab === 'history' ? historyCard()
     : matchTab();
+  const seasonBar = seasonScoped && s.seasons.length
+    ? pickerBar() + closedBanner(selectedSeason())
+    : '';
   const lang = `<button class="chip period" data-act="lang">${T('language')}</button>`;
-  return headerPlain(s.team?.name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
-    + `<div class="view"><div class="tabs">${tabs}</div><div class="setup">${body}</div></div>`;
+  return headerPlain(club().name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
+    + `<div class="view"><div class="tabs">${tabs}</div>${seasonBar}<div class="setup">${body}</div></div>`;
 }
 
 function shortDate(iso) {
@@ -396,29 +469,34 @@ function selectMatch(match) {
  * Planning several matches in advance is the whole point of this list.
  */
 function teamsTab() {
-  const list = teams();
+  const season = selectedSeason();
+  if (!season) return `<div class="card"><div class="muted">${T('noSeason')}</div></div>`;
+  const list = teamsOf(season.id);
+  const can = editable();
   return `<div class="card">
-      <h3>${T('tabTeams')}</h3>
+      <h3>${T('tabTeams')} · ${season.year}</h3>
       ${list.length
         ? list.map((t) => `<button class="matchrow" data-act="openteam:${t.id}">
             <span class="opp">${esc(t.name)}</span>
-            <span class="dt">${T('playersN', { n: t.playerIds.length })}</span>
+            <span class="dt">${T('playersN', { n: t.personIds.length })}</span>
             <span style="color:var(--ink3);font-size:17px;line-height:1">›</span>
           </button>`).join('')
         : `<div class="muted">${T('noTeams')}</div>`}
-      <button class="btn wide" style="margin-top:12px" data-act="newteam">+ ${T('newTeam')}</button>
+      ${can ? `<button class="btn wide" style="margin-top:12px" data-act="newteam">+ ${T('newTeam')}</button>` : ''}
     </div>`;
 }
 
 function viewTeam() {
   const t = s.editingTeam;
-  const list = roster();
+  const season = seasonById(s.editingTeam.seasonId) || selectedSeason();
+  const list = rosterOf(season?.id);
+  const can = editable();
   return `<header>
       <div class="toprow">
         <button class="back" data-act="backteam" aria-label="${T('cancel')}">‹</button>
-        <span>${T('tabTeams')}</span>
+        <span>${T('tabTeams')}${season ? ` · ${season.year}` : ''}</span>
         <span class="grow"></span>
-        <button class="chip period" data-act="saveteam2">${T('save')}</button>
+        ${can ? `<button class="chip period" data-act="saveteam2">${T('save')}</button>` : ''}
       </div>
       <div style="display:flex;align-items:baseline;gap:8px;margin-top:2px">
         <div style="font-size:17px;font-weight:700;letter-spacing:-.02em">${esc(t.name || T('newTeam'))}</div>
@@ -429,28 +507,30 @@ function viewTeam() {
         <h3>${T('teamNameLbl')}</h3>
         <form id="teamnameform">
           <div class="field" style="margin:0">
-            <input name="teamname" value="${esc(t.name || '')}" placeholder="P16 A" autocomplete="off">
+            <input name="teamname" value="${esc(t.name || '')}" placeholder="P16 A" autocomplete="off"
+              ${can ? '' : 'readonly'}>
           </div>
         </form>
       </div>
       <div class="card">
-        <h3>${T('teamPlayers')} · ${t.playerIds.length}/${list.length}</h3>
+        <h3>${T('teamPlayers')} · ${t.personIds.length}/${list.length}</h3>
         ${list.length
           ? `<div class="chiprow" style="padding:0">${list.map((pl) => `<button
-              class="tog ${t.playerIds.includes(pl.id) ? 'on' : 'off'}"
-              data-act="togmember:${pl.id}">${esc(pl.name)}</button>`).join('')}</div>`
+              class="tog ${t.personIds.includes(pl.id) ? 'on' : 'off'}"
+              ${can ? `data-act="togmember:${pl.id}"` : ''}>${esc(pl.name)}</button>`).join('')}</div>`
           : `<div class="muted">${T('rosterEmpty')}</div>`}
       </div>
-      ${t.isNew ? '' : `<button class="btn wide" style="color:var(--red);border-color:#e6cfcc"
+      ${t.isNew || !can ? '' : `<button class="btn wide" style="color:var(--red);border-color:#e6cfcc"
         data-act="deleteteam">${T('deleteTeam')}</button>`}
     </div></div>`;
 }
 
 function matchTab() {
-  if (!s.team.players.length) return `<div class="empty">${T('squadEmpty')}</div>`;
+  const season = openSeason();
+  if (!season || !activeRoster(season.id).length) return `<div class="empty">${T('squadEmpty')}</div>`;
 
   // A match is played by a team, so there has to be one first.
-  if (!teams().length) {
+  if (!teamsOf(season.id).length) {
     return `<div class="card">
       <h3>${T('newMatch')}</h3>
       <div class="muted">${T('noTeamForMatch')}</div>
@@ -504,7 +584,7 @@ function newMatchForm(onlyOption = false) {
           <input name="minutes" type="number" min="5" max="45" value="20" inputmode="numeric"></div>
       </div>
       <div class="field"><label>${T('teamForMatch')}</label>
-        <select name="teamid">${teams().map((tm) => `<option value="${tm.id}">${esc(tm.name)}</option>`).join('')}</select></div>
+        <select name="teamid">${teamsOf(openSeason()?.id).map((tm) => `<option value="${tm.id}">${esc(tm.name)}</option>`).join('')}</select></div>
       <div class="field"><label>${T('blockLength')}</label>
         <select name="block">
           <option value="7" selected>${T('block7')}</option>
@@ -519,52 +599,82 @@ function newMatchForm(onlyOption = false) {
   </div>`;
 }
 
-function squadCard() {
-  const players = roster();
-  const rows = players.length
-    ? players.map((p) => `<div class="matchrow">
-        <span style="font:600 12px/1 var(--num);color:var(--ink3);width:26px">${esc(p.no || '')}</span>
-        <span class="opp">${esc(p.name)}</span>
-        <button class="chip period" data-act="delplayer:${p.id}">${T('deletePlayer')}</button>
-      </div>`).join('')
-    : `<div class="muted">${T('rosterEmpty')}</div>`;
+function pickerBar(season = selectedSeason()) {
+  const c = club();
+  return `<div class="picker">
+      <button class="pbtn" data-act="clubsheet">${esc(c.name || T('clubName'))}<span class="cv">▾</span></button>
+      <button class="pbtn season" data-act="seasonsheet">${season ? season.year : '—'}<span class="cv">▾</span></button>
+    </div>`;
+}
+
+function closedBanner(season) {
+  if (!season?.closed) return '';
+  if (s.unlocked.has(season.id)) {
+    return `<div class="lockbar open"><span class="i">🔓</span>
+      <span><b>${season.year} unlocked.</b> Changes apply immediately.</span>
+      <button data-act="lockseason">${T('lock')}</button></div>`;
+  }
+  return `<div class="lockbar"><span class="i">🔒</span>
+    <span><b>${season.year} is closed.</b> Read-only.</span>
+    <button data-act="unlockseason">${T('unlock')}</button></div>`;
+}
+
+function rosterTab() {
+  const season = selectedSeason();
+  if (!season) {
+    return `<div class="card"><h3>${T('tabSquad')}</h3>
+      <div class="muted">${T('noSeason')}</div>
+      <button class="btn primary" style="width:100%;margin-top:12px" data-act="startseason">${T('startSeason')}</button>
+    </div>`;
+  }
+  const all = roster(season.id);
+  const active = all.filter((pl) => pl.status !== 'left');
+  const gone = all.filter((pl) => pl.status === 'left');
+  const can = editable();
+
+  const row = (pl) => `<button class="prow" data-act="playeredit:${pl.id}">
+      <span class="no">${esc(pl.no)}</span>
+      <span class="nm">${esc(pl.name)}</span>
+      <span class="cv">›</span>
+    </button>`;
 
   return `<div class="card">
-      <h3>${T('tabSquad')}</h3>
-      ${rows}
-      <form id="playerform" style="margin-top:12px">
+      <h3>${T('tabSquad')} · ${active.length}</h3>
+      ${active.length ? active.map(row).join('') : `<div class="muted">${T('rosterEmpty')}</div>`}
+      ${gone.length ? `<div class="sechead2"><span>${T('archived')} · ${gone.length}</span></div>
+        ${gone.map((pl) => `<button class="prow gone" data-act="playeredit:${pl.id}">
+          <span class="no">${esc(pl.no)}</span>
+          <span class="nm">${esc(pl.name)}</span>
+          <span class="tag">${pl.leftAt ? T('leftOn', { d: shortDate(pl.leftAt) }) : T('left')}</span>
+          <span class="cv">›</span></button>`).join('')}` : ''}
+    </div>
+    ${can ? `<form id="playerform" style="margin-top:12px">
         <div class="rowline">
           <div class="field" style="flex:2"><label>${T('playerName')}</label>
             <input name="name" required autocomplete="off" placeholder="Leo"></div>
           <div class="field" style="flex:1"><label>${T('shirtNo')}</label>
             <input name="no" type="number" min="1" max="99" inputmode="numeric" placeholder="4"></div>
         </div>
-        <button class="btn wide" data-act="addplayer">${T('addPlayer')}</button>
-      </form>
-    </div>
-    <div class="card">
-      <h3>${T('clubName')}</h3>
-      <form id="teamform">
-        <div class="field"><label>${T('clubName')}</label>
-          <input name="teamname" value="${esc(s.team?.name || '')}" placeholder="Uppåkra P16" autocomplete="off"></div>
-        <button class="btn wide" data-act="saveteam">${T('save')}</button>
-      </form>
-    </div>`;
+        <button class="btn wide" data-act="addplayer">+ ${T('addPlayerTo', { year: season.year })}</button>
+      </form>` : ''}`;
 }
 
 function historyCard() {
-  const all = store.listMatches().filter((m) => m.status === 'final');
-  if (!all.length) return `<div class="empty">${T('noMatches')}</div>`;
-  return `<div class="card"><h3>${T('tabHistory')}</h3>${all.slice().reverse().map((m) => {
-    const evs = store.loadEvents(m.id);
-    const p = project(evs, m, Date.now());
+  const season = selectedSeason();
+  const all = store.listMatches()
+    .filter((m) => m.status === 'final')
+    .filter((m) => !season || (m.seasonId || season.id) === season.id);
+  const rows = all.slice().reverse().map((m) => {
+    const p = project(store.loadEvents(m.id), m, Date.now());
     return `<button class="matchrow" data-act="openrecap:${m.id}">
       <span class="dt">${esc((m.kickoff || '').slice(5)) || '—'}</span>
       <span class="opp">${esc(m.opponent || '—')}</span>
       <span class="sc">${p.score.for}–${p.score.against}</span>
       <span style="color:var(--ink3);font-size:17px;line-height:1">›</span>
     </button>`;
-  }).join('')}</div>`;
+  }).join('');
+  return `<div class="card"><h3>${T('tabHistory')}${season ? ` · ${season.year}` : ''}</h3>
+      ${rows || `<div class="muted">${T('noMatches')}</div>`}</div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -627,7 +737,7 @@ function viewPlan() {
           class="tog ${inSquad(pl.id) ? 'on' : 'off'}" data-act="togplayer:${pl.id}">${esc(pl.name)}</button>`).join('')}</div>
     </div>`;
 
-  return headerPlain(`${T('plan')} · ${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes}`,
+  return headerPlain(`${T('plan')} · ${esc(club().name)} · ${c.periodCount} × ${c.periodMinutes}`,
     s.match?.opponent || '',
     `<button class="chip period" data-act="saveplan">${T('save')}</button>`)
     + `<div class="view">
@@ -790,7 +900,7 @@ function planSheetHtml() {
     <div class="sheet tall">
       <div class="grab"></div>
       <h2>${T('plan')}<span class="when">${T('periodN', { n: p.period })} · ${mmss(p.clockMs)}</span></h2>
-      <div class="psub">${esc(s.team.name)} · ${c.periodCount} × ${c.periodMinutes} · ${T('readOnlyPlay')}</div>
+      <div class="psub">${esc(club().name)} · ${c.periodCount} × ${c.periodMinutes} · ${T('readOnlyPlay')}</div>
       <div class="pbody">${out.join('')}
         <div class="plegend"><span class="sw"></span>${T('youAreHere')}</div>
       </div>
@@ -805,6 +915,92 @@ function renderSheet() {
   const when = `<span class="when">${T('periodN', { n: p.period })} · ${mmss(p.clockMs)}</span>`;
   const onIds = Object.values(p.onField).filter(Boolean);
   const close = `<button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>`;
+
+  if (sh.kind === 'clubs') {
+    const c = club();
+    return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
+      <div class="grab"></div><h2>${T('clubName')}<span class="when">${T('tabSquad')}</span></h2>
+      <form id="clubform">
+        <div class="field"><label>${T('clubName')}</label>
+          <input name="clubname" value="${esc(c.name || '')}" placeholder="Uppåkra IF" autocomplete="off"></div>
+      </form>
+      ${s.clubs.length > 1 ? s.clubs.map((x) => `<button class="ytab ${x.id === c.id ? '' : 'off'}"
+          data-act="pickclub:${x.id}"><span><span class="yr">${esc(x.name)}</span></span>
+          ${x.id === c.id ? '<span class="tick">✓</span>' : ''}</button>`).join('') : ''}
+      <button class="btn primary" style="width:100%;margin-top:10px" data-act="saveclub">${T('save')}</button>
+      <button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>
+    </div>`;
+  }
+
+  if (sh.kind === 'seasons') {
+    const cur = selectedSeason();
+    const cid = cur?.clubId || club().id;
+    const mine = s.seasons.filter((x) => x.clubId === cid).sort((a, b) => b.year - a.year);
+    const next = (mine[0]?.year || new Date().getFullYear()) + 1;
+    return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
+      <div class="grab"></div><h2>${T('season')}<span class="when">${esc(club().name)}</span></h2>
+      ${mine.map((x) => {
+        const n = rosterOf(x.id).filter((pl) => pl.status !== 'left').length;
+        return `<button class="ytab ${x.closed ? 'off' : ''}" data-act="pickseason:${x.id}">
+          <span><span class="yr">${x.year}</span>
+          <div class="sub">${n === 1 ? T('playersOne') : T('playersN', { n })} · ${x.closed ? T('closed') : T('open')}</div></span>
+          ${x.id === cur?.id ? '<span class="tick">✓</span>' : ''}</button>`;
+      }).join('')}
+      <div style="height:10px"></div>
+      <button class="startnew" data-act="startseason"><span class="plus">+</span>
+        <span><div class="t">${T('startSeasonYear', { year: next })}</div>
+        <div class="s">${mine.length ? T('carriedFrom', { year: mine[0].year }) : T('noSeason')}</div></span></button>
+      <button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>
+    </div>`;
+  }
+
+  if (sh.kind === 'newseason') {
+    const from = selectedSeason() || openSeason();
+    const carry = from ? rosterOf(from.id).filter((pl) => pl.status !== 'left') : [];
+    const gone = from ? rosterOf(from.id).filter((pl) => pl.status === 'left') : [];
+    const year = from ? from.year + 1 : new Date().getFullYear();
+    return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
+      <div class="grab"></div><h2>${T('startSeasonYear', { year })}<span class="when">${esc(club().name)}</span></h2>
+      ${from ? `<div class="q">${T('carriedFrom', { year: from.year })}</div>` : ''}
+      <div>
+        <div class="crow"><span class="cl">${carry.length === 1 ? T('playersOne') : T('playersN', { n: carry.length })}</span>
+          <span class="tag ok">${T('numbersKept')}</span></div>
+        <div class="crow"><span class="cl">${(() => {
+          const n = from ? teamsOf(from.id).length : 0;
+          return n === 1 ? T('teamsOne') : T('teamsN', { n });
+        })()}</span>
+          <span class="tag ok">${from ? teamsOf(from.id).map((t) => esc(t.name)).join(' · ') || '—' : '—'}</span></div>
+        ${gone.length ? `<div class="crow gone"><span class="cl">${gone.map((pl) => esc(pl.name)).join(', ')}</span>
+          <span class="tag">${T('notCarried')}</span></div>` : ''}
+      </div>
+      <div class="qsub" style="margin-top:10px">${T('newSeasonNote')}</div>
+      <button class="btn primary" style="width:100%;margin-top:12px" data-act="createseason">${T('createSeason', { year })}</button>
+      <button class="sheetclose" data-act="sheet:close">${T('cancel')}</button>
+    </div>`;
+  }
+
+  if (sh.kind === 'playeredit') {
+    const season = selectedSeason();
+    const person = personById(sh.personId) || { name: '' };
+    const entry = entryFor(sh.personId, season?.id) || { no: '', status: 'active' };
+    const can = editable();
+    return `<div class="scrim" data-act="sheet:close"></div><div class="sheet">
+      <div class="grab"></div><h2>${T('player')}<span class="when">${season?.year || ''}</span></h2>
+      <form id="pedit">
+        <div class="field"><label>${T('playerName')}</label>
+          <input name="pname" value="${esc(person.name || '')}" ${can ? '' : 'readonly'} autocomplete="off"></div>
+        <div class="field"><label>${T('shirtNo')}</label>
+          <input name="pno" type="number" min="1" max="99" value="${esc(entry.no || '')}"
+            ${can ? '' : 'readonly'} inputmode="numeric"></div>
+      </form>
+      ${can ? `<button class="btn primary" style="width:100%" data-act="saveplayer">${T('save')}</button>` : ''}
+      ${can && entry.status === 'left'
+        ? `<button class="btn wide" style="width:100%;margin-top:8px" data-act="restoreplayer">${T('restore')}</button>`
+        : can ? `<button class="btn wide" style="width:100%;margin-top:8px;color:var(--red);border-color:#e6ccca"
+            data-act="archiveplayer">${T('archive')}</button>` : ''}
+      <button class="sheetclose" data-act="sheet:close">${T('close')}</button>
+    </div>`;
+  }
 
   if (sh.kind === 'assist') {
     const others = onIds.filter((id) => id !== sh.playerId);
@@ -949,7 +1145,7 @@ function recapText(pastMatch = null) {
     ? project(store.loadEvents(pastMatch.id), matchConfig(pastMatch), Date.now())
     : proj();
   const goals = p.timeline.filter((e) => e.type === 'goal_for');
-  const lines = [`${s.team.name} – ${m.opponent || ''}  ${p.score.for}–${p.score.against}`];
+  const lines = [`${club().name} – ${m.opponent || ''}  ${p.score.for}–${p.score.against}`];
   if (goals.length) {
     lines.push(goals.map((g) => {
       const who = player(g.payload.scorer).name;
@@ -1044,7 +1240,8 @@ function createMatch(form) {
     periodCount: Math.max(1, Math.min(6, Number(f.get('periods')) || 3)),
     periodMinutes: Math.max(5, Math.min(45, Number(f.get('minutes')) || 20)),
     blockMinutes: Number(f.get('block')) || 7,
-    teamId: String(f.get('teamid') || teams()[0]?.id || ''),
+    teamId: String(f.get('teamid') || teamsOf(openSeason()?.id)[0]?.id || ''),
+    seasonId: openSeason()?.id || s.seasonId,
     status: 'setup',
     createdAt: new Date().toISOString(),
   };
@@ -1059,46 +1256,138 @@ function createMatch(form) {
 }
 
 function addPlayer(form) {
+  const season = selectedSeason();
+  if (!season || !editable()) return;
   const f = new FormData(form);
   const name = String(f.get('name') || '').trim();
   if (!name) return;
   const no = String(f.get('no') || '').trim();
-  s.team.players.push({ id: uid(), name, no });
-  store.saveTeam(s.team);
+
+  // Reuse the person if this kid already exists in the club (same name, and not
+  // already enrolled this season) — a season rollover must not clone people.
+  const existing = s.people.find((pl) => pl.name.toLowerCase() === name.toLowerCase()
+    && !entryFor(pl.id, season.id));
+  const person = existing || { id: uid(), name };
+  if (!existing) s.people.push(person);
+  s.entries.push({ personId: person.id, seasonId: season.id, no, status: 'active' });
+  persistModel();
   form.reset();
   render();
 }
 
-function saveTeamForm(form) {
-  const f = new FormData(form);
-  const name = String(f.get('teamname') || '').trim();
-  if (name) s.team.name = name;
-  store.saveTeam(s.team);
-  render();
+function saveClubName(name) {
+  const c = s.clubs.find((x) => x.id === club().id);
+  if (!c) return;
+  c.name = String(name || '').trim() || c.name;
+  store.saveClubs(s.clubs);
 }
 
-/** The master list of kids, added once. */
-function roster() {
-  return s.team?.players || [];
+/** Enter a season: closes the open one and carries the roster and teams over. */
+function createSeason() {
+  const from = selectedSeason() || openSeason();
+  const cid = club().id || (from && seasonById(from.id)?.clubId);
+  if (!cid) return;
+  const mine = s.seasons.filter((x) => x.clubId === cid);
+  const year = from ? from.year + 1 : new Date().getFullYear();
+
+  for (const x of mine) if (!x.closed) x.closed = true;
+
+  const season = { id: uid(), clubId: cid, year, closed: false };
+  s.seasons.push(season);
+
+  const carry = from ? rosterOf(from.id).filter((pl) => pl.status !== 'left') : [];
+  for (const pl of carry) {
+    if (entryFor(pl.id, season.id)) continue;
+    s.entries.push({ personId: pl.id, seasonId: season.id, no: pl.no, status: 'active' });
+  }
+  if (from) {
+    for (const t of teamsOf(from.id)) {
+      s.teams.push({
+        id: uid(), seasonId: season.id, name: t.name,
+        personIds: t.personIds.filter((id) => carry.some((c) => c.id === id)),
+      });
+    }
+  }
+  persistModel();
+  s.seasonId = season.id;
+  s.sheet = null;
+  showToast(`✓ ${T('seasonCreated', { year })}`, null);
+}
+
+/* ------------------------------------------------------------------ *
+ * Model: club → season → roster (people enrolled) → teams → matches
+ * ------------------------------------------------------------------ */
+
+function club() {
+  return s.clubs.find((c) => c.id === s.clubId) || s.clubs[0] || { id: '', name: '' };
+}
+
+function seasonById(id) {
+  return s.seasons.find((x) => x.id === id) || null;
+}
+
+function openSeason() {
+  return [...s.seasons].filter((x) => !x.closed).sort((a, b) => b.year - a.year)[0] || null;
+}
+
+function selectedSeason() {
+  return seasonById(s.seasonId) || openSeason();
+}
+
+function matchSeasonId(m = s.match) {
+  return m?.seasonId || openSeason()?.id || s.seasonId;
+}
+
+function personById(id) {
+  return s.people.find((p) => p.id === id) || null;
+}
+
+function entryFor(personId, seasonId) {
+  return s.entries.find((e) => e.personId === personId && e.seasonId === seasonId) || null;
+}
+
+/** Enrolled people for a season, with the shirt number they wore that season. */
+function rosterOf(seasonId) {
+  return s.entries
+    .filter((e) => e.seasonId === seasonId)
+    .map((e) => ({
+      id: e.personId,
+      name: personById(e.personId)?.name || '',
+      no: e.no || '',
+      status: e.status || 'active',
+      leftAt: e.leftAt || null,
+    }))
+    .filter((pl) => pl.name);
+}
+
+function roster(seasonId = s.seasonId) {
+  return rosterOf(seasonId);
+}
+
+function activeRoster(seasonId = s.seasonId) {
+  return rosterOf(seasonId).filter((pl) => pl.status !== 'left');
+}
+
+function teamsOf(seasonId) {
+  return s.teams.filter((t) => t.seasonId === seasonId);
 }
 
 function teams() {
-  return store.loadTeams();
+  return teamsOf(s.seasonId);
 }
 
 function teamById(id) {
-  return teams().find((t) => t.id === id) || null;
+  return s.teams.find((t) => t.id === id) || null;
 }
 
-function saveTeamsList(list) {
-  store.saveTeams(list);
-}
-
-/** The squad a team brings: roster members picked into this match's team. */
+/** The squad a team brings: its people, minus anyone who has left. */
 function teamRoster() {
   const t = teamById(s.match?.teamId);
-  if (!t) return roster();
-  return roster().filter((p) => t.playerIds.includes(p.id));
+  const seasonId = matchSeasonId();
+  const base = t
+    ? rosterOf(seasonId).filter((pl) => t.personIds.includes(pl.id))
+    : rosterOf(seasonId);
+  return base.filter((pl) => pl.status !== 'left');
 }
 
 /** Who is actually here today: the team minus this match's absences. */
@@ -1107,27 +1396,46 @@ function inSquad(id) {
 }
 
 function squad() {
-  return teamRoster().filter((p) => inSquad(p.id));
+  return teamRoster().filter((pl) => inSquad(pl.id));
 }
 
-/** Plan cells and availability must not reference a kid who left the roster. */
-function purgePlayer(id) {
-  s.team.players = roster().filter((p) => p.id !== id);
-  store.saveTeam(s.team);
-  if (s.match) {
-    if (Array.isArray(s.match.unavailable)) {
-      s.match.unavailable = s.match.unavailable.filter((x) => x !== id);
+/** Can the selected season be edited? Open, or deliberately unlocked. */
+function editable() {
+  const season = selectedSeason();
+  if (!season) return false;
+  return !season.closed || s.unlocked.has(season.id);
+}
+
+/**
+ * A kid leaves. The enrolment is archived: they disappear from every picker and
+ * from plans for matches not yet played, and every match they played keeps its
+ * minutes because the event log still points at the same person.
+ */
+function archiveEntry(personId, seasonId) {
+  const e = entryFor(personId, seasonId);
+  if (!e) return;
+  e.status = 'left';
+  e.leftAt = new Date().toISOString().slice(0, 10);
+  store.saveEntries(s.entries);
+
+  for (const m of store.listMatches()) {
+    if (m.seasonId !== seasonId || m.status === 'final') continue;
+    const plan = store.loadPlan(m.id).filter((c) => c.playerId !== personId);
+    store.savePlan(m.id, plan);
+    if (s.match?.id === m.id) s.plan = plan;
+    if ((m.unavailable || []).includes(personId)) {
+      m.unavailable = m.unavailable.filter((x) => x !== personId);
+      store.saveMatch(m);
     }
-    s.plan = s.plan.filter((c) => c.playerId !== id);
-    store.savePlan(s.match.id, s.plan);
-    saveMatch();
   }
 }
 
-function ensureTeam() {
-  if (!s.team) s.team = { id: uid(), name: '', players: [] };
-  if (!s.team.players) s.team.players = [];
-  return s.team;
+function restoreEntry(personId, seasonId) {
+  const e = entryFor(personId, seasonId);
+  if (!e) return;
+  e.status = 'active';
+  e.leftAt = null;
+  store.saveEntries(s.entries);
 }
 
 function autoPlan() {
@@ -1205,12 +1513,60 @@ function handle(ev) {
     case 'newmatch': s.creating = true; s.route = null; render(); return;
     case 'goto': s.tab = a; s.creating = false; render(); return;
 
+    case 'clubsheet': s.sheet = { kind: 'clubs' }; render(); return;
+    case 'seasonsheet': s.sheet = { kind: 'seasons' }; render(); return;
+    case 'startseason': s.sheet = { kind: 'newseason' }; render(); return;
+    case 'createseason': createSeason(); render(); return;
+    case 'pickseason': s.seasonId = a; s.sheet = null; render(); return;
+    case 'pickclub': {
+      s.clubId = a;
+      const open = [...s.seasons].filter((x) => x.clubId === a && !x.closed)
+        .sort((x, y) => y.year - x.year)[0];
+      s.seasonId = open?.id || s.seasons.find((x) => x.clubId === a)?.id || null;
+      s.sheet = null; render(); return;
+    }
+    case 'saveclub': {
+      const el = document.querySelector('#clubform [name="clubname"]');
+      saveClubName(el?.value);
+      s.sheet = null; showToast(`✓ ${T('saved')}`, null); return;
+    }
+    case 'unlockseason': s.unlocked.add(selectedSeason().id); render(); return;
+    case 'lockseason': s.unlocked.delete(selectedSeason().id); render(); return;
+    case 'playeredit': s.sheet = { kind: 'playeredit', personId: a }; render(); return;
+    case 'saveplayer': {
+      const sh = s.sheet;
+      const seasonId = selectedSeason().id;
+      const person = personById(sh.personId);
+      const entry = entryFor(sh.personId, seasonId);
+      const nameEl = document.querySelector('#pedit [name="pname"]');
+      const noEl = document.querySelector('#pedit [name="pno"]');
+      if (person && nameEl && String(nameEl.value).trim()) {
+        person.name = String(nameEl.value).trim();
+        store.savePeople(s.people);
+      }
+      if (entry && noEl) {
+        entry.no = String(noEl.value).trim();
+        store.saveEntries(s.entries);
+      }
+      s.sheet = null; showToast(`✓ ${T('saved')}`, null); return;
+    }
+    case 'archiveplayer': {
+      if (!confirm(T('confirmArchive'))) return;
+      archiveEntry(s.sheet.personId, selectedSeason().id);
+      s.sheet = null; showToast(`✓ ${T('archived')}`, null); return;
+    }
+    case 'restoreplayer': {
+      restoreEntry(s.sheet.personId, selectedSeason().id);
+      s.sheet = null; render(); return;
+    }
+
     case 'newteam':
-      s.editingTeam = { id: uid(), name: '', playerIds: [], isNew: true };
+      s.editingTeam = { id: uid(), name: '', personIds: [], isNew: true,
+        seasonId: selectedSeason()?.id || null };
       s.route = 'team'; render(); return;
     case 'openteam': {
       const t = teamById(a);
-      if (t) { s.editingTeam = { ...t, playerIds: [...t.playerIds] }; s.route = 'team'; }
+      if (t) { s.editingTeam = { ...t, personIds: [...t.personIds] }; s.route = 'team'; }
       render(); return;
     }
     case 'togmember': {
@@ -1219,23 +1575,26 @@ function handle(ev) {
       // because the editor re-renders from state.
       const input = document.querySelector('#teamnameform [name="teamname"]');
       if (input) t.name = input.value;
-      t.playerIds = t.playerIds.includes(a) ? t.playerIds.filter((x) => x !== a) : [...t.playerIds, a];
+      t.personIds = t.personIds.includes(a) ? t.personIds.filter((x) => x !== a) : [...t.personIds, a];
       render(); return;
     }
     case 'saveteam2': {
       const t = s.editingTeam;
       const input = document.querySelector('#teamnameform [name="teamname"]');
       const name = (input?.value || '').trim() || T('newTeam');
-      const list = teams().filter((x) => x.id !== t.id);
-      list.push({ id: t.id, name, playerIds: [...t.playerIds] });
-      saveTeamsList(list);
+      const list = s.teams.filter((x) => x.id !== t.id);
+      list.push({ id: t.id, seasonId: t.seasonId || selectedSeason()?.id, name,
+        personIds: [...t.personIds] });
+      s.teams = list;
+      store.saveTeams(s.teams);
       s.editingTeam = null; s.route = null;
       showToast(`✓ ${T('saved')}`, null);
       return;
     }
     case 'deleteteam': {
       if (!confirm(T('confirmDeleteTeam'))) return;
-      saveTeamsList(teams().filter((x) => x.id !== s.editingTeam.id));
+      s.teams = s.teams.filter((x) => x.id !== s.editingTeam.id);
+      store.saveTeams(s.teams);
       s.editingTeam = null; s.route = null; render(); return;
     }
     case 'backteam': s.editingTeam = null; s.route = null; render(); return;
@@ -1452,13 +1811,21 @@ function seedDemo() {
     ['Axel', 5], ['Ville', 11], ['Omar', 8], ['Isak', 6],
   ].map(([name, no]) => ({ id: 'p' + no, name, no }));
 
-  s.team = { id: 't1', name: 'Uppåkra P16', players };
-  store.saveTeam(s.team);
-  store.saveTeams([{ id: 'tm1', name: 'P16 A', playerIds: players.map((p) => p.id) }]);
+  const clubId = 'c1';
+  const seasonId = 's1';
+  s.clubs = [{ id: clubId, name: 'Uppåkra P16' }];
+  s.seasons = [{ id: seasonId, clubId, year: new Date().getFullYear(), closed: false }];
+  s.people = players.map((pl) => ({ id: pl.id, name: pl.name }));
+  s.entries = players.map((pl) => ({ personId: pl.id, seasonId, no: String(pl.no), status: 'active' }));
+  s.teams = [{ id: 'tm1', seasonId, name: 'P16 A', personIds: players.map((pl) => pl.id) }];
+  s.clubId = clubId;
+  s.seasonId = seasonId;
+  persistModel();
 
   const match = {
     id: 'm1', opponent: 'Lunds BK', kickoff: new Date(now).toISOString().slice(0, 10),
     periodCount: 3, periodMinutes: 20, blockMinutes: 7, status: 'live', teamId: 'tm1',
+    seasonId: 's1',
   };
   s.match = match;
   store.saveMatch(match);
@@ -1506,10 +1873,9 @@ function seedDemo() {
 }
 
 boot();
-ensureTeam();
 if (new URLSearchParams(location.search).get('seed') === '1') { seedDemo(); }
 // First run: land where the work is, not on an empty tab.
-if (!s.team.players.length) s.tab = 'squad';
+if (!s.people.length) s.tab = 'squad';
 // ?seed=1&plan=1 lands on the planner with the demo squad already planned
 if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
   s.match.status = 'setup';

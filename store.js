@@ -11,6 +11,10 @@ const P = 'mm.v1.';
 const K = {
   team: P + 'team',
   teams: P + 'teams',
+  clubs: P + 'clubs',
+  seasons: P + 'seasons',
+  people: P + 'people',
+  entries: P + 'entries',
   matches: P + 'matches',
   events: (id) => P + 'events.' + id,
   plan: (id) => P + 'plan.' + id,
@@ -61,6 +65,16 @@ export function createStore(storage = globalThis.localStorage) {
       else all[i] = match;
       return write(K.matches, all);
     },
+
+    /* ---- clubs / seasons / people / enrolments ---- */
+    loadClubs: () => asArray(read(K.clubs, [])),
+    saveClubs: (list) => write(K.clubs, list),
+    loadSeasons: () => asArray(read(K.seasons, [])),
+    saveSeasons: (list) => write(K.seasons, list),
+    loadPeople: () => asArray(read(K.people, [])),
+    savePeople: (list) => write(K.people, list),
+    loadEntries: () => asArray(read(K.entries, [])),
+    saveEntries: (list) => write(K.entries, list),
 
     /* ---- teams (named groups picked from the roster) ---- */
     loadTeams: () => asArray(read(K.teams, [])),
@@ -117,6 +131,10 @@ export function createStore(storage = globalThis.localStorage) {
         exportedAt: new Date().toISOString(),
         team: read(K.team, null),
         teams: read(K.teams, []),
+        clubs: read(K.clubs, []),
+        seasons: read(K.seasons, []),
+        people: read(K.people, []),
+        entries: read(K.entries, []),
         matches,
         plan: Object.fromEntries(matches.map((m) => [m.id, read(K.plan(m.id), [])])),
         events: Object.fromEntries(matches.map((m) => [m.id, read(K.events(m.id), [])])),
@@ -127,6 +145,10 @@ export function createStore(storage = globalThis.localStorage) {
       if (!data || data.v !== 1) return false;
       write(K.team, data.team);
       write(K.teams, data.teams || []);
+      write(K.clubs, data.clubs || []);
+      write(K.seasons, data.seasons || []);
+      write(K.people, data.people || []);
+      write(K.entries, data.entries || []);
       write(K.matches, data.matches || []);
       for (const [id, cells] of Object.entries(data.plan || {})) write(K.plan(id), cells);
       for (const [id, evs] of Object.entries(data.events || {})) write(K.events(id), evs);

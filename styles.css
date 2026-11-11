@@ -270,3 +270,57 @@ table.grid td:active{background:#eae5dc}
 .setexact button{flex:none;padding:0 14px;border-radius:10px;background:var(--green);color:#fff;
   font-weight:700;font-size:12.5px}
 .setexact button:active{transform:scale(.97)}
+
+/* ---------- season picker + season-scoped roster ---------- */
+.picker{display:flex;gap:6px;padding:10px 14px 0;flex:none}
+.pbtn{flex:1;display:flex;align-items:center;justify-content:space-between;gap:6px;height:36px;
+  padding:0 11px;border-radius:9px;background:#f1ede5;font-size:13px;font-weight:600;
+  color:var(--ink);letter-spacing:-.01em;min-width:0;text-align:left}
+.pbtn.season{flex:.62}
+.pbtn .cv{opacity:.45;font-size:10px;line-height:1;flex:none}
+.pbtn:active{background:#e9e4d9}
+
+.lockbar{display:flex;align-items:center;gap:8px;margin:10px 14px 0;padding:8px 10px;flex:none;
+  border-radius:11px;background:var(--amber-soft);border:1px solid #f0e2c9;
+  font-size:11px;line-height:1.35;color:var(--ink2)}
+.lockbar .i{font-size:13px}
+.lockbar b{font-weight:700;color:var(--ink)}
+.lockbar button{margin-left:auto;flex:none;background:#fff;border:1px solid #e8d9be;
+  border-radius:7px;padding:5px 8px;font-size:10.5px;font-weight:700;color:var(--amber)}
+.lockbar.open{background:#eef4ee;border-color:#cfe3d6}
+.lockbar.open button{color:var(--green);border-color:#cfe3d6}
+
+.prow{display:flex;align-items:center;gap:9px;width:100%;min-height:46px;padding:0 2px;
+  border-bottom:1px solid var(--line2);text-align:left}
+.prow:last-child{border-bottom:0}
+.prow .no{font:600 12px/1 var(--num);color:var(--ink3);width:24px;flex:none}
+.prow .nm{flex:1;font-size:15px;font-weight:600;letter-spacing:-.01em;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.prow .cv{color:#c3bcae;font-size:15px;line-height:1;flex:none}
+.prow.gone .nm{color:var(--ink3);font-weight:500}
+.prow.gone .no{opacity:.6}
+.tag{flex:none;font:600 9px/1 var(--num);letter-spacing:.04em;color:#8a8172;background:#efeae1;
+  border-radius:5px;padding:3px 5px}
+.tag.ok{background:var(--green-soft);color:var(--green)}
+.sechead2{display:flex;align-items:center;justify-content:space-between;padding:13px 2px 3px;
+  font:700 9.5px/1 var(--num);letter-spacing:.11em;text-transform:uppercase;color:var(--ink3)}
+
+/* season + club sheets */
+.ytab{display:flex;align-items:center;gap:9px;width:100%;padding:11px 12px;border-radius:10px;
+  background:#fff;border:1px solid var(--line);margin-bottom:6px;text-align:left}
+.ytab .yr{font:700 16px/1 var(--num)}
+.ytab .sub{font-size:11px;color:var(--ink3);margin-top:3px}
+.ytab .tick{margin-left:auto;color:var(--green);font-weight:700}
+.ytab.off .yr{color:var(--ink3)}
+.startnew{display:flex;align-items:center;gap:9px;width:100%;padding:11px 12px;border-radius:10px;
+  background:var(--green-soft);border:1px dashed #bcd6c4;text-align:left}
+.startnew .plus{width:22px;height:22px;border-radius:50%;background:var(--green);color:#fff;
+  font-weight:700;line-height:22px;text-align:center;flex:none}
+.startnew .t{font-size:13px;font-weight:700;color:var(--green)}
+.startnew .s{font-size:11px;color:#4b7a5c;margin-top:2px}
+
+.crow{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:46px;
+  border-bottom:1px solid var(--line2)}
+.crow:last-child{border-bottom:0}
+.crow .cl{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.crow.gone .cl{color:var(--ink3);font-weight:500}
