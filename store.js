@@ -7,6 +7,8 @@
  * Nothing here knows about the network. Phase 2 adds a sync queue on top.
  */
 
+import { stampEvents } from './engine.js';
+
 const P = 'mm.v1.';
 const K = {
   team: P + 'team',
@@ -85,20 +87,26 @@ export function createStore(storage = globalThis.localStorage) {
     savePlan: (matchId, cells) => write(K.plan(matchId), cells),
 
     /* ---- events (append-only) ---- */
-    loadEvents: (matchId) => asArray(read(K.events(matchId), [])),
+    /** Canonical order: (atMs, id). Every consumer replays in this order. */
+    loadEvents: (matchId) => asArray(read(K.events(matchId), []))
+      .slice()
+      .sort((a, b) => (Number(a.atMs) || 0) - (Number(b.atMs) || 0)
+        || String(a.id).localeCompare(String(b.id))),
 
     /** Appends one event. Returns the event, or null if storage refused it. */
     appendEvent(matchId, event) {
-      const all = asArray(read(K.events(matchId), []));
-      all.push(event);
-      return write(K.events(matchId), all) ? event : null;
+      const saved = this.appendEvents(matchId, [event]);
+      return saved.length ? saved[0] : null;
     },
 
     appendEvents(matchId, events) {
       if (!events.length) return [];
       const all = asArray(read(K.events(matchId), []));
-      all.push(...events);
-      return write(K.events(matchId), all) ? events : [];
+      // Strictly increasing timestamps: the replay order is (atMs, id), and a
+      // shared millisecond would otherwise fall through to a random id.
+      const stamped = stampEvents(all, events);
+      all.push(...stamped);
+      return write(K.events(matchId), all) ? stamped : [];
     },
 
     /**

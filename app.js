@@ -159,8 +159,10 @@ function act(type, payload = {}, { silent = false } = {}) {
     payload,
     author: 'coach',
   };
-  store.appendEvent(s.match.id, ev);
-  s.events.push(ev);
+  // The store may stamp a later atMs to keep the log strictly ordered; keep the
+  // in-memory copy identical to what was persisted.
+  const saved = store.appendEvent(s.match.id, ev);
+  s.events.push(saved || ev);
   if (!silent) {
     const summary = describe(ev);
     if (summary) showToast(summary, ev.id);
@@ -1884,8 +1886,7 @@ function seedDemo() {
     ev('goal_against', now - 5 * M, {}),
     ev('goal_for', now - 3 * M, { scorer: byName.Omar, assist: byName.Axel }),
   ];
-  store.appendEvents(match.id, events);
-  s.events = events;
+  s.events = store.appendEvents(match.id, events);
 }
 
 boot();

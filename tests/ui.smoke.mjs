@@ -89,7 +89,14 @@ async function main() {
 
   console.log('live screen');
   ok('seven on-field rows', (await evaluate("document.querySelectorAll('.view .list .row').length")) === 9);
-  ok('clock shows seeded 07:12', (await text('[data-clock]')).includes('07:12'));
+  // The seeded match starts 7.2 minutes ago, so the clock is 07:12 plus however
+  // long this run took to boot — assert the range, not the exact second.
+  const seededClock = await text('[data-clock]');
+  const clockSecs = (() => {
+    const m = seededClock.match(/(\d+):(\d+)/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
+  })();
+  ok('clock reflects the seeded 7.2 minutes of play', clockSecs >= 432 && clockSecs <= 445, seededClock);
   ok('score 2–1', (await text('.score')).replace(/\s/g, '') === '2–1');
   ok('goal buttons only on on-field rows',
     (await evaluate("document.querySelectorAll('.row .rbtn.goal').length")) === 7);
@@ -323,6 +330,17 @@ async function main() {
   ok('Apply puts exactly the planned players on the pitch',
     JSON.stringify([...onField].sort()) === JSON.stringify(plannedNames),
     `pitch=${onField.sort().join(',')} plan=${plannedNames.join(',')}`);
+  // Two sub events written in the same millisecond must still be ordered.
+  const stamped = await evaluate(`(() => {
+    return Object.keys(localStorage).filter(function(k){ return k.indexOf('mm.v1.events.') === 0; })
+      .every(function(k){
+        const evs = JSON.parse(localStorage.getItem(k) || '[]');
+        const t = evs.map(function(e){ return Number(e.atMs) || 0; });
+        return t.every(function(v, i){ return i === 0 || v > t[i - 1]; });
+      });
+  })()`);
+  ok('every event log is strictly ordered in time', stamped === true, String(stamped));
+
   ok('strip advances to the next boundary (or clears)',
     (await evaluate("!!document.querySelector('.nxt')")) === false
     || (await text('.nxt .chg')).includes('→'));

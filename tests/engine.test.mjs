@@ -10,6 +10,7 @@ import {
   canCreditGoal,
   benchList,
   onFieldList,
+  stampEvents,
 } from '../engine.js';
 
 const CONFIG = { periodCount: 3, periodMinutes: 20, blockMinutes: 7 };
@@ -380,4 +381,66 @@ test('benchList: fewest minutes first, keeper included like anyone else', () => 
 
   assert.deepEqual(bench.map((p) => p.id), ['p1', 'p7']);
   assert.equal(onFieldList(s).length, 7);
+});
+
+/* ---------------------------------------------------------------- *
+ * Event order
+ * ---------------------------------------------------------------- */
+
+test('stampEvents: two writes in the same millisecond stay in order', () => {
+  const same = T0;
+  const incoming = [
+    { id: 'b-second', type: 'sub', atMs: same, payload: {} },
+    { id: 'a-first', type: 'sub', atMs: same, payload: {} },
+  ];
+  const out = stampEvents([], incoming);
+
+  assert.equal(out[0].atMs, same);
+  assert.equal(out[1].atMs, same + 1);
+  assert.deepEqual(out.map((e) => e.id), ['b-second', 'a-first'],
+    'array order is preserved, not re-sorted by id');
+});
+
+test('stampEvents: monotonic against what is already stored', () => {
+  const existing = [{ id: 'x', type: 'goal_for', atMs: T0 + 10, payload: {} }];
+  const out = stampEvents(existing, [{ id: 'y', type: 'sub', atMs: T0, payload: {} }]);
+
+  assert.equal(out[0].atMs, T0 + 11, 'a stale clock cannot rewind the log');
+});
+
+test('replay is order-independent: shuffling the log changes nothing', () => {
+  const events = [
+    lineup(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']),
+    ev('period_start', at(0), { period: 1 }),
+    ev('goal_for', at(3), { scorer: 'p7', assist: 'p5' }),
+    ev('sub', at(7), { off: ['p7'], on: ['p8'], slots: { p8: 'F' } }),
+    ev('move', at(9), { player: 'p5', from: 'MM', to: 'RM' }),
+    ev('period_end', at(20), { period: 1 }),
+  ];
+  const base = project(events, CONFIG, at(20));
+
+  const shuffled = [events[4], events[0], events[5], events[2], events[1], events[3]];
+  const again = project(shuffled, CONFIG, at(20));
+
+  assert.equal(again.score.for, base.score.for);
+  assert.deepEqual(Object.keys(again.players).sort(), Object.keys(base.players).sort());
+  for (const id of Object.keys(base.players)) {
+    assert.equal(again.players[id].playMs, base.players[id].playMs, `${id} minutes`);
+    assert.equal(again.players[id].goals, base.players[id].goals, `${id} goals`);
+  }
+  assert.deepEqual(again.onField, base.onField);
+});
+
+test('same-millisecond events resolve by id, deterministically', () => {
+  const line = lineup(['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']);
+  const start = { id: 'a-start', type: 'period_start', atMs: at(0), payload: { period: 1 } };
+  const first = { id: 'aaaa', type: 'goal_for', atMs: at(1), payload: { scorer: 'p7' } };
+  const second = { id: 'zzzz', type: 'goal_for', atMs: at(1), payload: { scorer: 'p5' } };
+
+  // The same objects in two different array orders must replay identically.
+  const one = project([line, second, start, first], CONFIG, at(2));
+  const two = project([line, first, start, second], CONFIG, at(2));
+
+  assert.equal(one.score.for, 2);
+  assert.deepEqual(one.timeline.map((e) => e.id), two.timeline.map((e) => e.id));
 });

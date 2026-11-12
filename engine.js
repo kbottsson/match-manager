@@ -167,6 +167,23 @@ function newPlayer(id) {
  * @param config  { periodCount, periodMinutes, blockMinutes }
  * @param nowMs   wall clock to project to (pass Date.now() from the UI)
  */
+
+/**
+ * Events are replayed in (atMs, id) order. Two writes in the same millisecond
+ * would otherwise be ordered by id, which is random — so timestamps are made
+ * strictly increasing per match at write time. This preserves the order things
+ * actually happened in, and makes that order identical on every device.
+ */
+export function stampEvents(existing = [], incoming = []) {
+  let last = existing.reduce((m, e) => Math.max(m, Number(e.atMs) || 0), 0);
+  return incoming.map((e) => {
+    const want = Number(e.atMs) || Date.now();
+    const atMs = Math.max(want, last + 1);
+    last = atMs;
+    return e.atMs === atMs ? e : { ...e, atMs };
+  });
+}
+
 export function project(events = [], config = {}, nowMs = Date.now()) {
   const c = cfg(config);
   const P = c.periodCount;
