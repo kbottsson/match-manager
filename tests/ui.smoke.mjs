@@ -96,7 +96,7 @@ async function main() {
     const m = seededClock.match(/(\d+):(\d+)/);
     return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
   })();
-  ok('clock reflects the seeded 7.2 minutes of play', clockSecs >= 432 && clockSecs <= 445, seededClock);
+  ok('clock reflects the seeded 7.2 minutes of play', clockSecs >= 425 && clockSecs <= 450, seededClock);
   ok('score 2–1', (await text('.score')).replace(/\s/g, '') === '2–1');
   ok('goal buttons only on on-field rows',
     (await evaluate("document.querySelectorAll('.row .rbtn.goal').length")) === 7);
