@@ -1,4 +1,3 @@
-// Fill database_id after: npx wrangler d1 create match-manager
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "match-manager-api",
@@ -11,7 +10,14 @@
     {
       "binding": "DB",
       "database_name": "match-manager",
-      "database_id": "TO_FILL_AFTER_CREATE"
+      "database_id": "d327028d-000a-4208-8f34-00203647d244"
     }
-  ]
+  ],
+  "routes": [
+    {
+      "pattern": "api.kbottsson.com",
+      "custom_domain": true
+    }
+  ],
+  "workers_dev": true
 }
