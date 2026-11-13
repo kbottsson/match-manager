@@ -26,7 +26,7 @@ const ok = (name, cond, extra = '') => {
   else { failures++; console.log(`  ✖ ${name} ${extra}`); }
 };
 
-const server = spawn('python3', ['-m', 'http.server', String(PORT)], { stdio: 'ignore' });
+const server = spawn('python3', ['-m', 'http.server', String(PORT)], { stdio: 'ignore', cwd: 'public' });
 const profile = mkdtempSync(join(tmpdir(), 'mmseasons-'));
 const chrome = spawn(CHROME, [
   '--headless=new', '--disable-gpu', '--hide-scrollbars',

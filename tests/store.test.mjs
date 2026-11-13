@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createStore, uid } from '../store.js';
+import { createStore, uid } from '../public/store.js';
 
 function fakeStorage() {
   const map = new Map();

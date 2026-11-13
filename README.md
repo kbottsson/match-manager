@@ -3,6 +3,14 @@
 Playing time, substitutions, goals and assists for 7-a-side youth football
 (3 × 20-minute periods, two substitutions per period).
 
+## Live
+
+- **App** — https://kbottsson.com
+- **API** — https://api.kbottsson.com (health: `/api/health`)
+
+The app is served as Workers static assets from `public/`; the API is the same
+Worker, behind `/api/*`. One origin, so no CORS and no split deployment.
+
 Built for one coach on one phone, on a touchline, in the cold, with no signal.
 
 ## What it does

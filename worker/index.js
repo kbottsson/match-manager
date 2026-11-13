@@ -478,6 +478,11 @@ async function lease(request, env, auth, matchId) {
 
 async function handle(request, env) {
   const url = new URL(request.url);
+
+  if (url.hostname.startsWith('www.')) {
+    return Response.redirect(`https://${url.hostname.slice(4)}${url.pathname}${url.search}`, 301);
+  }
+
   const path = url.pathname.replace(/\/+$/, '') || '/';
 
   if (path === '/api/health') {
@@ -490,6 +495,11 @@ async function handle(request, env) {
 
   if (path === '/api/bootstrap' && request.method === 'POST') return bootstrap(request, env);
   if (path === '/api/auth/redeem' && request.method === 'POST') return redeem(request, env);
+
+  if (!path.startsWith('/api/')) {
+    if (env.ASSETS) return env.ASSETS.fetch(request);
+    return fail(404, 'not_found', 'No assets binding configured.');
+  }
 
   const auth = await authenticate(request, env);
   if (!auth) return fail(401, 'unauthorized', 'Missing or invalid token.');

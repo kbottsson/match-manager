@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import en from '../i18n/en.js';
-import sv from '../i18n/sv.js';
-import { t, setLang, getLang, detectLang, pos, DICTS } from '../i18n/index.js';
-import { SLOTS } from '../engine.js';
+import en from '../public/i18n/en.js';
+import sv from '../public/i18n/sv.js';
+import { t, setLang, getLang, detectLang, pos, DICTS } from '../public/i18n/index.js';
+import { SLOTS } from '../public/engine.js';
 
 const flatten = (obj, prefix = '') =>
   Object.entries(obj).flatMap(([k, v]) => {

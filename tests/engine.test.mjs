@@ -11,7 +11,7 @@ import {
   benchList,
   onFieldList,
   stampEvents,
-} from '../engine.js';
+} from '../public/engine.js';
 
 const CONFIG = { periodCount: 3, periodMinutes: 20, blockMinutes: 7 };
 const T0 = 1_700_000_000_000;

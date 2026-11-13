@@ -4,7 +4,7 @@ A small app for running a 7-a-side match: playing time, substitutions, goals
 and assists. Built for a phone on a touchline — big buttons, works with no
 signal.
 
-**https://kbottsson.github.io/match-manager/**
+**https://kbottsson.com/**
 
 No account, no sign-up, no cost. It's an early build, so expect rough edges —
 that's what I want your eyes on.
