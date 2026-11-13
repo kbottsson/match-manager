@@ -355,6 +355,65 @@ function deviceLabel() {
   return 'Browser';
 }
 
+/**
+ * A link can carry two kinds of secret: an invite to redeem, or a device token
+ * that is already a credential (the owner's, handed over once). The server
+ * decides — /api/me answers for a device token and refuses an invite.
+ */
+async function resolveJoinToken() {
+  const j = s.join;
+  if (!j?.token || j.kind) return;
+  try {
+    const res = await api.me(j.token);
+    s.join = { ...j, kind: 'device', me: res.data };
+    render();
+    return;
+  } catch (err) {
+    // Anything other than "not a device token" is not our business here; the
+    // invite path will report it properly.
+    if (err.code !== 'unauthorized' && err.code !== 'http_401') {
+      s.join = { ...j, kind: 'invite' };
+      render();
+      return;
+    }
+  }
+  s.join = { ...j, kind: 'invite' };
+  render();
+  loadJoinPreview();
+}
+
+/** Pair with a token that is already a credential: no invitation to spend. */
+async function pairWithDeviceToken() {
+  const token = s.join?.token;
+  if (!token) return;
+  s.join = { ...s.join, busy: true, error: null };
+  render();
+  try {
+    const res = await api.me(token);
+    pairing = {
+      token,
+      tenant: res.data.tenant,
+      member: res.data.member,
+      deviceId: res.data.deviceId || null,
+      pairedAt: new Date().toISOString(),
+    };
+    savePairing(pairing);
+    sync.setIdentity({
+      deviceId: pairing.deviceId, member: pairing.member,
+      tenant: pairing.tenant, role: pairing.member.role,
+    });
+    s.join = null;
+    history.replaceState(null, '', '/');
+    await adoptLocalIntoClub();
+    await hydrateFromClub();
+    render();
+    showToast(`✓ ${T('joined')} ${esc(res.data.tenant.name)}`, null);
+  } catch (err) {
+    s.join = { ...s.join, busy: false, error: err.code || 'network' };
+    render();
+  }
+}
+
 async function loadJoinPreview() {
   const j = s.join;
   if (!j?.token || j.preview || j.loading) return;
@@ -388,6 +447,24 @@ function viewJoin() {
       </div>` : '';
   const dead = j.previewError
     ? `<div class="robanner"><span class="dot"></span>${esc(T('inviteBad'))} · ${esc(j.previewError)}</div>` : '';
+
+  // A token that is already a credential: nothing to redeem, only to accept.
+  if (j.kind === 'device') {
+    const me = j.me || {};
+    return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div>
+        <div style="font-size:17px;font-weight:700;margin-top:4px">${T('deviceTokenTitle')}</div>
+      </header>
+      <div class="view">
+        ${j.error ? `<div class="robanner"><span class="dot"></span>${esc(T('joinFailed'))} · ${esc(j.error)}</div>` : ''}
+        <div class="card">
+          <h3>${esc(me.tenant?.name || '')}</h3>
+          <p class="muted">${esc(T('deviceTokenAs', { name: me.member?.name || '', role: roleLabel(me.member?.role || '') }))}</p>
+          <p class="muted" style="margin-top:8px">${esc(T('deviceTokenExplain'))}</p>
+          <button class="btn primary wide" data-act="usedevicetoken" ${j.busy ? 'disabled' : ''}
+            style="margin-top:12px">${j.busy ? '…' : T('deviceTokenUse')}</button>
+        </div>
+      </div>`;
+  }
 
   if (j.previewError) {
     return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div></header>
@@ -2108,6 +2185,7 @@ function handle(ev) {
       return;
     }
     case 'dojoin': if (form) redeemJoin(new FormData(form)); return;
+    case 'usedevicetoken': pairWithDeviceToken(); return;
     case 'club': s.route = 'club'; s.sheet = null; loadMembers(); render(); return;
     case 'newinvite': makeInvite(); return;
     case 'refreshmembers': loadMembers(); return;
@@ -2515,7 +2593,7 @@ globalThis.__mm = {
 };
 
 render();
-if (s.join) loadJoinPreview();
+if (s.join) resolveJoinToken();
 if (paired()) hydrateFromClub();
 setInterval(tick, 250);
 

@@ -76,6 +76,28 @@ try {
   });
   ok('an admin invite exists', adminInvite.status === 201);
 
+  /* ---- a device token is accepted as itself, not mistaken for an invite ---- */
+  D: {
+    const owner = new Phone(9414, 'owner');
+    try {
+      await owner.launch();
+      await owner.goto(BASE + '/join#' + boot.body.token);
+      const screen = await owner.waitFor(async () => {
+        const t = await owner.text();
+        return /already has access|har redan åtkomst/i.test(t) ? t : null;
+      }, 'the device-token screen');
+      ok('a device token is recognised, not rejected as a bad invite', !!screen);
+      ok('…and it says who this phone becomes', /Derek/.test(screen) && !/not valid|inte giltig/i.test(screen));
+      ok('…without asking for a name', (await owner.js("!document.querySelector('input[name=name]')")) === true);
+
+      await owner.click('[data-act="usedevicetoken"]');
+      await owner.waitFor(() => owner.js("!!localStorage.getItem('mm.sync.pairing')"), 'the owner device pairs');
+      ok('the owner token pairs the phone directly', true);
+      const role = await owner.js("JSON.parse(localStorage.getItem('mm.sync.pairing')).member.role");
+      ok('…as the owner, not a coach', role === 'owner', 'role ' + role);
+    } finally { owner.close(); }
+  }
+
   /* ---- the admin pairs and opens the club screen ---- */
   A = new Phone(9411, 'a');
   await A.launch();

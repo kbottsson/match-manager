@@ -155,7 +155,7 @@ export function createApi({
 
     revokeMember: (id) => call('DELETE', `/api/members/${id}`),
 
-    me: () => call('GET', '/api/me'),
+    me: (token) => (token ? call('GET', '/api/me', { token }) : call('GET', '/api/me')),
 
     sync: ({ since = 0, revs = '*', etag } = {}) =>
       call('GET', `/api/sync?since=${encodeURIComponent(since)}&revs=${encodeURIComponent(revs)}`,
