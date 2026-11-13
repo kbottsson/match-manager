@@ -24,6 +24,7 @@
 | D10 | Score | Both teams: our goal (scorer + optional assist), their goal (score only) |
 | D11 | Clock | Manual START/STOP, referee-aligned, counts up, never auto-stops. Drift correction tucked behind the clock display, not a visible button. |
 | D12 | Where controls live | **On the player's row.** ⚽ and ⇄ sit on every row; the bottom bar holds only clock, their goal and undo. Position changes and minute edits live behind the player's name. |
+| D13 | Who may use the app | **Anyone.** No login, no gate, no invite needed to open it and run a full match. The boundary is *storage*, not entry: nothing leaves the device and nothing is written to the club until the device holds a pairing token. An unpaired device is a private, offline silo — permanently, and by design. See §12a. |
 
 **Deferred by D9, explicitly out of v1:** tolerance thresholds, red/amber fairness flags, "this player can no longer reach the target" warnings, ranked substitution suggestions, fairness badges in history. The data those need is still captured, so adding them later is a UI layer, not a schema change.
 
@@ -580,6 +581,27 @@ GET  /api/teams/:slug/matches       history
 - Unguessable team slug, `noindex, nofollow`, no analytics, no third-party scripts or CDN fonts.
 - Two kinds of link: the slug opens `○ VIEW` for anyone who has it (fine for the team chat); writing also needs the lease and the team PIN.
 - "Delete team" hard-deletes everything; per-match delete too. No automatic expiry; the whole dataset stays under 1 MB.
+
+### 12a. Who may use it (D13)
+
+The app is **open**: anyone who finds the URL can open it and run a complete match, with no account, no invite and no gate. That is deliberate — the door is not the boundary.
+
+The boundary is **where data stops**:
+
+| | Unpaired device | Paired device |
+|---|---|---|
+| Open the app, run a match | yes | yes |
+| Data on the device | yes (`localStorage`) | yes |
+| Data in the club (D1) | **never written** | written, subject to the phase-2 sync rules |
+| Anyone else can see it | no | yes, per role |
+| Survives a lost phone | **no** | yes |
+
+Rules that follow, and must not be softened for convenience:
+
+1. **An unpaired device never calls a write endpoint.** No outbox, no background flush, no speculative `POST`. Sync code is inert without a token.
+2. **An unpaired device says so**, visibly and without alarm: local-only, not backed up, nobody else can see it. A coach must never believe a match is shared when it isn't.
+3. **No backup means no backup.** Clearing browser data or losing the phone loses the season. This is the accepted cost of keeping the app frictionless; the state must be stated, never glossed.
+4. **Pairing attaches, it does not replace.** When an unpaired device redeems an invite, the season already on it is adopted into the club and pushed — not discarded in favour of an empty server copy.
 
 ## 13. Non-functional
 
