@@ -95,9 +95,9 @@ export function createApi({
   fetchImpl = (...a) => globalThis.fetch(...a),
   timeoutMs = 10_000,
 } = {}) {
-  async function call(method, path, { body, headers = {}, token } = {}) {
-    const t = token ?? getToken();
-    if (!t) throw new SyncError('not_paired', 'This device is not paired.');
+  async function call(method, path, { body, headers = {}, token, anon = false } = {}) {
+    const t = anon ? null : (token ?? getToken());
+    if (!anon && !t) throw new SyncError('not_paired', 'This device is not paired.');
 
     // A request that never settles would hold the drain open for ever, and the
     // queue behind it would never move. On a touchline, "slow" must degrade to
@@ -111,7 +111,7 @@ export function createApi({
         method,
         signal: ctrl ? ctrl.signal : undefined,
         headers: {
-          authorization: 'Bearer ' + t,
+          ...(t ? { authorization: 'Bearer ' + t } : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
           ...headers,
         },
@@ -140,7 +140,20 @@ export function createApi({
 
   return {
     redeem: (invite, name, device) =>
-      call('POST', '/api/auth/redeem', { body: { invite, name, device }, token: '-' }),
+      call('POST', '/api/auth/redeem', { body: { invite, name, device }, anon: true }),
+
+    /** What the join screen shows before the invite is spent. No auth needed. */
+    previewInvite: (invite) =>
+      call('GET', `/api/invites/${encodeURIComponent(invite)}/preview`, { anon: true }),
+
+    members: () => call('GET', '/api/members'),
+
+    invite: (role = 'coach', teamId = null) =>
+      call('POST', '/api/members/invite', { body: { role, ...(teamId ? { teamId } : {}) } }),
+
+    revokeInvite: (id) => call('DELETE', `/api/invites/${id}`),
+
+    revokeMember: (id) => call('DELETE', `/api/members/${id}`),
 
     me: () => call('GET', '/api/me'),
 
@@ -257,12 +270,19 @@ export function nextPollDelay({ failures = 0, live = true, hidden = false } = {}
   return BACKOFF_MS[Math.min(failures - 1, BACKOFF_MS.length - 1)];
 }
 
-/** True when the lease exists, is not stale, and is held by someone else. */
+/**
+ * free   — nobody is recording
+ * mine   — this device holds it, even if its own heartbeat has lapsed (a phone
+ *          that slept through three minutes still owns its match; it must not
+ *          be locked out of its own recording by its own silence)
+ * stale  — someone else held it and stopped; claimable, but only on purpose
+ * theirs — someone else is recording right now
+ */
 export function leaseState(lease, deviceId, now = Date.now()) {
   if (!lease?.holder) return { state: 'free', mine: false, name: null };
+  if (deviceId && lease.holder === deviceId) return { state: 'mine', mine: true, name: lease.name };
   const age = now - Number(lease.seenAt || 0);
   if (age >= LEASE_STALE_MS) return { state: 'stale', mine: false, name: lease.name };
-  if (lease.holder === deviceId) return { state: 'mine', mine: true, name: lease.name };
   return { state: 'theirs', mine: false, name: lease.name };
 }
 
@@ -506,7 +526,13 @@ export function createController({
       if (beat) clearTimer(beat);
       const step = async () => {
         if (!state.running || !state.paired || !state.matchId) return;
-        try { await this.claim('heartbeat'); } catch { /* retried on the next beat */ }
+        // Someone else's lease — fresh or gone quiet — is theirs to give up.
+        // Claiming a quiet one would be a silent takeover, so we stop asking
+        // and leave it to the coach (the screen offers it explicitly).
+        const theirs = state.lease && !state.lease.mine;
+        if (!theirs) {
+          try { await this.claim('heartbeat'); } catch { /* retried on the next beat */ }
+        }
         beat = setTimer(step, ms);
       };
       beat = setTimer(step, Math.min(firstMs, ms));

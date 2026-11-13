@@ -203,6 +203,13 @@ test('lease: free, mine, theirs and stale', () => {
   assert.equal(leaseState({ holder: 'd2', name: 'A', seenAt: t0 }, 'd1', t0 + LEASE_STALE_MS - 1).state, 'theirs');
 });
 
+test('lease: a recorder keeps its own match even after its heartbeat lapses', () => {
+  const t0 = 1_000_000;
+  const mine = { holder: 'd1', name: 'Derek', seenAt: t0 };
+  assert.equal(leaseState(mine, 'd1', t0 + LEASE_STALE_MS + 5000).state, 'mine');
+  assert.equal(leaseState(mine, 'd1', t0 + 600_000).mine, true, 'a phone that slept is still the recorder');
+});
+
 test('lease: a sixty-second silence belongs to nobody', () => {
   const t0 = 1_000_000;
   const l = { holder: 'd2', name: 'A', seenAt: t0 };

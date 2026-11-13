@@ -283,7 +283,25 @@ try {
   }, 'A notices it is no longer recording', 20000);
   ok('A is demoted to read-only, without asking', !!aLost);
 
-  /* ---- 9. the event logs agree ---- */
+  /* ---- 9. a recorder who goes quiet does not hand over the pen silently ---- */
+  // A is read-only now (B holds it). Age B's lease past the stale window and
+  // the screen must say so, keep A out of the controls, and offer the choice.
+  await A.js(`(() => {
+    __mm.remote.lease = { holder: 'someone-else', name: 'Amanda', seenAt: Date.now() - 65000 };
+    __mm.render();
+    return true;
+  })()`);
+  await sleep(400);
+  const quietText = await A.text();
+  ok('a recorder who has gone quiet is announced', /stoppade registrera|stopped recording/i.test(quietText),
+    quietText.slice(0, 120));
+  ok('…and the screen is still not writable', (await A.js("document.querySelectorAll('[data-act^=\"goal:\"]').length")) === 0);
+  ok('…with the pen offered, not taken', await A.js("!!document.querySelector('[data-act=\"takeover\"]')"));
+
+  const stillStale = await A.js('__mm.remote.lease?.holder');
+  ok('…and nothing claimed it behind the coach\'s back', stillStale === 'someone-else', 'holder ' + stillStale);
+
+  /* ---- 10. the event logs agree ---- */
   const aEvents = await A.js("JSON.parse(localStorage.getItem('mm.v1.events.m1') || '[]').map(e => e.id)");
   const bEvents = await B.js("JSON.parse(localStorage.getItem('mm.v1.events.m1') || '[]').map(e => e.id)");
   ok('both phones hold the same event log', JSON.stringify(aEvents) === JSON.stringify(bEvents),

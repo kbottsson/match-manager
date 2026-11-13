@@ -182,10 +182,18 @@ async function main() {
 
   const revocable = await req('POST', '/api/members/invite', { token: owner, body: { role: 'coach', name: 'Wrong person' } });
   eq('an invite can be created', revocable.status, 201);
+  // The join screen must be able to describe the club before the invite is spent.
+  const preview = await req('GET', `/api/invites/${revocable.body.token}/preview`);
+  eq('an invite can be previewed without a token', preview.status, 200);
+  eq('…and names the club it leads to', preview.body.club, boot.body.tenant.name);
+  eq('…and how many players are already there', typeof preview.body.clubPlayers, 'number');
+  eq('a made-up invite has no preview', (await req('GET', '/api/invites/nonsense/preview')).status, 410);
+
   const revokedInvite = await req('DELETE', `/api/invites/${revocable.body.id}`, { token: owner });
   eq('and revoked before it is used', revokedInvite.status, 200);
   const usedAfterRevoke = await req('POST', '/api/auth/redeem', { body: { invite: revocable.body.token, name: 'Wrong person' } });
   eq('a revoked invite cannot be redeemed', usedAfterRevoke.status, 410);
+  eq('…and no longer previews either', (await req('GET', `/api/invites/${revocable.body.token}/preview`)).status, 410);
 
   const coachInvite = await req('POST', '/api/members/invite', { token: owner, body: { role: 'coach', teamId: 't2' } });
   const coachRedeem = await req('POST', '/api/auth/redeem', { body: { invite: coachInvite.body.token, name: 'Sam' } });

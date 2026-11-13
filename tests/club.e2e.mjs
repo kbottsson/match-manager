@@ -1,0 +1,196 @@
+/**
+ * The club screen, end to end: inviting, being invited, and leaving.
+ *
+ * Boots a real `wrangler dev` with a real D1, then drives two headless phones:
+ * an admin who invites, and a second coach who arrives through the link and
+ * should see what they are joining before they spend the invite.
+ *
+ * Run: node tests/club.e2e.mjs
+ */
+import { spawn, spawnSync } from 'node:child_process';
+import { rmSync } from 'node:fs';
+import { Phone, sleep } from './lib/phone.mjs';
+
+const PORT = 8791;
+const BASE = `http://127.0.0.1:${PORT}`;
+
+let failures = 0;
+const ok = (name, cond, extra = '') => {
+  if (cond) console.log(`  ✔ ${name}`);
+  else { failures++; console.log(`  ✖ ${name}${extra ? ' — ' + extra : ''}`); }
+};
+
+async function api(method, path, { token, body } = {}) {
+  const res = await fetch(BASE + path, {
+    method,
+    headers: {
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+      ...(token ? { authorization: 'Bearer ' + token } : {}),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { /* not json */ }
+  return { status: res.status, body: json };
+}
+
+rmSync('.wrangler/state', { recursive: true, force: true });
+const schema = spawnSync('npx', ['--yes', 'wrangler@latest', 'd1', 'execute', 'match-manager',
+  '--local', '--file', 'worker/schema.sql'], { encoding: 'utf8' });
+if (schema.status !== 0) {
+  console.error('schema apply failed:\n', (schema.stderr || '').slice(-1200));
+  process.exit(1);
+}
+
+// Invite links are minted from APP_URL, so the test server must name itself —
+// otherwise the link points at production and the test walks into the real club.
+const dev = spawn('npx', ['--yes', 'wrangler@latest', 'dev', '--local', '--port', String(PORT), '--ip', '127.0.0.1',
+  '--var', `APP_URL:${BASE}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+let devLog = '';
+dev.stdout.on('data', (d) => { devLog += d; });
+dev.stderr.on('data', (d) => { devLog += d; });
+
+let A = null;
+let B = null;
+function shutdown() {
+  A?.close(); B?.close();
+  try { dev.kill('SIGKILL'); } catch { /* ignore */ }
+}
+process.on('exit', shutdown);
+
+try {
+  let up = false;
+  for (let i = 0; i < 200; i++) {
+    try { const r = await api('GET', '/api/health'); if (r.status === 200 && r.body?.db) { up = true; break; } } catch { /* booting */ }
+    await sleep(300);
+  }
+  if (!up) throw new Error('wrangler dev did not come up\n' + devLog.slice(-600));
+
+  const boot = await api('POST', '/api/bootstrap', { body: { clubName: 'Uppåkra P16', ownerName: 'Derek' } });
+  ok('a club exists', boot.status === 201, 'status ' + boot.status);
+  const owner = boot.body.token;
+
+  const adminInvite = await api('POST', '/api/members/invite', {
+    token: owner, body: { role: 'team_admin', name: 'Derek' },
+  });
+  ok('an admin invite exists', adminInvite.status === 201);
+
+  /* ---- the admin pairs and opens the club screen ---- */
+  A = new Phone(9411, 'a');
+  await A.launch();
+  await A.goto(BASE + '/join#' + adminInvite.body.token);
+  await A.waitFor(() => A.js("!!document.querySelector('input[name=name]')"), 'join form');
+  await A.js("document.querySelector('input[name=name]').value = 'Derek'");
+  await A.click('[data-act="dojoin"]');
+  await A.waitFor(() => A.js("!!localStorage.getItem('mm.sync.pairing')"), 'A pairs');
+  ok('the admin device is paired', true);
+
+  if (process.env.DEBUG) {
+    console.log('    [dbg] A text :', (await A.text()).replace(/\s+/g, ' ').slice(0, 220));
+    console.log('    [dbg] chips  :', await A.js("Array.from(document.querySelectorAll('.chip')).map(c => c.dataset.act + '/' + c.innerText).join(' | ')"));
+    console.log('    [dbg] route  :', await A.js('__mm.state.route'));
+  }
+  await A.js("window.__errs = []; addEventListener('error', e => window.__errs.push(String(e.message))); true");
+  await A.click('[data-act="club"]');
+  await sleep(600);
+  if (process.env.DEBUG) {
+    console.log('    [dbg] html   :', (await A.js("document.getElementById('app').innerHTML")).slice(0, 140).replace(/\s+/g, ' '));
+    console.log('    [dbg] errs   :', JSON.stringify(await A.js('window.__errs')));
+  }
+  const clubScreen = await A.waitFor(async () => {
+    const t = await A.text();
+    return /tränare|coaches/i.test(t) ? t : null;
+  }, 'club screen');
+  ok('the club screen opens', !!clubScreen);
+  ok('it names this device as signed in', /Derek/.test(clubScreen));
+
+  /* ---- invite a coach from inside the app ---- */
+  await A.click('[data-act="newinvite"]');
+  const link = await A.waitFor(
+    () => A.js("document.querySelector('.card input[readonly]')?.value || null"),
+    'the invite link appears');
+  ok('inviting a coach produces a link in the app', /\/join#/.test(link));
+
+  const token = link.split('#')[1];
+  const preview = await api('GET', `/api/invites/${token}/preview`);
+  ok('the link leads to a real invite', preview.status === 200, 'status ' + preview.status);
+  ok('…for the right club', preview.body?.club === boot.body.tenant.name, JSON.stringify(preview.body));
+
+  /* ---- the invited coach sees the club before joining ---- */
+  B = new Phone(9412, 'b');
+  await B.launch();
+  await B.goto(link);
+  const joinText = await B.waitFor(async () => {
+    const t = await B.text();
+    return /player|spelare|Uppåkra/i.test(t) ? t : null;
+  }, 'the join screen describes the club');
+  ok('the join screen names the club before the invite is spent', /uppåkra p16/i.test(joinText));
+  ok('…and says the club is empty, because nothing has been pushed yet', /starting|helt ny|0 players|0 spelare/i.test(joinText));
+
+  await B.js("document.querySelector('input[name=name]').value = 'Amanda'");
+  await B.click('[data-act="dojoin"]');
+  await B.waitFor(() => B.js("!!localStorage.getItem('mm.sync.pairing')"), 'B pairs');
+  ok('the second coach joins', true);
+
+  /* ---- a plain coach gets no invite button, because the server would refuse ---- */
+  await B.click('[data-act="club"]');
+  await B.waitFor(() => B.js("!!document.querySelector('[data-act=\"refreshmembers\"]')"), 'B opens the club screen');
+  await B.waitFor(() => B.js("!!document.querySelector('.row.plain')"), 'B sees the members list');
+  ok('a coach may see the club', /amanda|derek/i.test(await B.text()));
+  ok('…but is not offered an invite it could not use',
+    (await B.js("!document.querySelector('[data-act=\"newinvite\"]')")) === true);
+  await B.click('[data-act="home"]');
+  ok('…and can leave the club screen', (await B.js("!document.querySelector('[data-act=\"refreshmembers\"]')")) === true);
+
+  /* ---- the admin sees them arrive ---- */
+  if (!(await A.js("!!document.querySelector('[data-act=\"refreshmembers\"]')"))) {
+    await A.click('[data-act="club"]');
+    await A.waitFor(() => A.js("!!document.querySelector('[data-act=\"refreshmembers\"]')"), 'A back on the club screen');
+  }
+  await A.click('[data-act="refreshmembers"]');
+  const both = await A.waitFor(async () => {
+    const t = await A.text();
+    return /Amanda/.test(t) ? t : null;
+  }, 'the members list refreshes');
+  ok('the admin sees the new coach in the club', /Amanda/.test(both));
+
+  /* ---- revoking a link that was sent to the wrong person ---- */
+  await A.click('[data-act="newinvite"]');
+  const second = await A.waitFor(
+    () => A.js("document.querySelector('.card input[readonly]')?.value || null"), 'a second link');
+  await A.click('[data-act^="revokeinvite:"]');
+  await A.waitFor(() => A.js("!document.querySelector('.card input[readonly]')"), 'the link is withdrawn');
+  const dead = await api('GET', `/api/invites/${second.split('#')[1]}/preview`);
+  ok('a revoked link stops working immediately', dead.status === 410, 'status ' + dead.status);
+
+  C: {
+    const C = new Phone(9413, 'c');
+    try {
+      await C.launch();
+      await C.goto(second);
+      const msg = await C.waitFor(async () => {
+        const t = await C.text();
+        return /does not work|fungerar inte/i.test(t) ? t : null;
+      }, 'the revoked link is refused');
+      ok('opening a revoked link says so, instead of failing silently', !!msg);
+    } finally { C.close(); }
+  }
+
+  /* ---- leaving ---- */
+  const before = await A.js("!!localStorage.getItem('mm.sync.pairing')");
+  await A.click('[data-act="unpair"]');
+  await A.waitFor(() => A.js("!localStorage.getItem('mm.sync.pairing')"), 'the device is unpaired');
+  ok('a device can leave the club', before === true
+    && (await A.js("!localStorage.getItem('mm.sync.pairing')")) === true);
+  ok('…and asks first', A.dialogs.length > 0, 'dialogs: ' + A.dialogs.length);
+  ok('…and says it is local only again', await A.js("!!document.querySelector('.chip.local')"));
+} catch (err) {
+  failures++;
+  console.log('\n  ✖ ' + err.message);
+} finally {
+  shutdown();
+}
+
+console.log(failures ? `\n${failures} check(s) failed` : '\nall club checks passed');
+process.exit(failures ? 1 : 0);

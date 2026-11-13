@@ -187,7 +187,11 @@ function leaseNow() {
  * not lock a coach out because the other phone's battery died.
  */
 function readOnly() {
-  return paired() && leaseNow().state === 'theirs';
+  if (!paired()) return false;
+  const st = leaseNow().state;
+  // A quiet lease is also read-only: the pen is unclaimed, and claiming it is a
+  // decision the coach makes, not something that happens behind their thumb.
+  return st === 'theirs' || st === 'stale';
 }
 
 /**
@@ -208,6 +212,9 @@ let lastClaimAt = 0;
 async function maybeClaim(force = false) {
   if (!paired() || !s.match || s.match.status !== 'live' || s.join) return null;
   if (sync.state().lease?.mine && !force) return sync.state().lease;
+  // Someone else's lease has gone quiet: the server would let us take it, but
+  // the coach should choose that, not discover it.
+  if (!force && leaseNow().state === 'stale') return null;
   if (!force && Date.now() - lastClaimAt < 2000) return null;
   lastClaimAt = Date.now();
   try {
@@ -348,15 +355,51 @@ function deviceLabel() {
   return 'Browser';
 }
 
+async function loadJoinPreview() {
+  const j = s.join;
+  if (!j?.token || j.preview || j.loading) return;
+  s.join = { ...j, loading: true };
+  try {
+    const res = await api.previewInvite(j.token);
+    s.join = { ...s.join, preview: res.data, loading: false };
+  } catch (err) {
+    s.join = { ...s.join, previewError: err.code || 'network', loading: false };
+  }
+  render();
+}
+
 function viewJoin() {
   const j = s.join || {};
-  const err = j.error ? `<div class="robanner">${esc(T('joinFailed'))} · ${esc(j.error)}</div>` : '';
+  const err = j.error ? `<div class="robanner"><span class="dot"></span>${esc(T('joinFailed'))} · ${esc(j.error)}</div>` : '';
+
+  // What the invite leads to, before it is spent.
+  const pv = j.preview;
+  const mine = { players: s.people.length, matches: store.listMatches().length };
+  const previewBlock = pv
+    ? `<div class="card" style="margin-bottom:12px">
+        <h3>${esc(pv.club)}</h3>
+        <p class="muted">${pv.clubPlayers > 0
+          ? esc(T('clubHasPlayers', { n: pv.clubPlayers }))
+          : esc(T('clubIsEmpty'))}</p>
+      </div>` : '';
+  const addBlock = pv && mine.players > 0
+    ? `<div class="strip local" style="margin:0 0 12px">
+        <span class="dot"></span>${esc(T('willAdd', { n: mine.players, m: mine.matches }))}
+      </div>` : '';
+  const dead = j.previewError
+    ? `<div class="robanner"><span class="dot"></span>${esc(T('inviteBad'))} · ${esc(j.previewError)}</div>` : '';
+
+  if (j.previewError) {
+    return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div></header>
+      <div class="view">${dead}</div>`;
+  }
+
   return `<header>
     <div class="toprow"><span class="chip">${T('joinClub')}</span></div>
     <div style="font-size:17px;font-weight:700;margin-top:4px">${T('joinTitle')}</div>
   </header>
   <div class="view">
-    ${err}
+    ${err}${previewBlock}${addBlock}
     <div class="card">
       <p class="muted" style="margin:0 0 12px">${T('joinExplain')}</p>
       <form data-form="join">
@@ -375,6 +418,155 @@ function syncChip() {
   return paired()
     ? `<span class="chip synced dot">${T('inClub')}</span>`
     : `<span class="chip local dot">${T('localOnly')}</span>`;
+}
+
+/* ------------------------------------------------------------------ *
+ * The club screen — who else is here, and the way out
+ * ------------------------------------------------------------------ */
+
+const s_club = { members: null, invites: [], busy: false, invite: null, error: null };
+
+async function loadMembers() {
+  if (!paired()) return;
+  s_club.busy = true;
+  s_club.error = null;
+  try {
+    const res = await api.members();
+    s_club.members = res.data?.members || [];
+    s_club.invites = res.data?.invites || [];
+  } catch (err) {
+    s_club.error = err.code || 'network';
+  } finally {
+    s_club.busy = false;
+    render();
+  }
+}
+
+async function makeInvite() {
+  if (!paired()) return;
+  s_club.busy = true;
+  s_club.error = null;
+  try {
+    const res = await api.invite('coach');
+    s_club.invite = res.data;
+  } catch (err) {
+    s_club.error = err.code || 'network';
+  } finally {
+    s_club.busy = false;
+    render();
+  }
+}
+
+async function revokeInviteLink(id) {
+  try { await api.revokeInvite(id); s_club.invite = null; } catch { /* leave it on screen */ }
+  render();
+}
+
+async function revokeMember(id) {
+  try { await api.revokeMember(id); await loadMembers(); } catch { render(); }
+}
+
+function unpairThisDevice() {
+  if (!confirm(T('unpairConfirm'))) return;
+  // Forget the token. The data stays: this device simply stops being in the club.
+  clearPairing();
+  pairing = null;
+  outbox.clear();
+  remote.lease = null;
+  sync.stop();
+  s_club.members = null;
+  s_club.invites = [];
+  s_club.invite = null;
+  s.route = null;
+  render();
+  showToast(`○ ${T('unpaired')}`, null);
+}
+
+/** The server decides, but there is no point offering a button that will 403. */
+function canInvite() {
+  return ['owner', 'team_admin'].includes(pairing?.member?.role);
+}
+
+function roleLabel(role) {
+  const map = { owner: T('roleOwner'), team_admin: T('roleAdmin'), coach: T('roleCoach'), viewer: T('roleViewer') };
+  return map[role] || role;
+}
+
+function viewClub() {
+  if (!paired()) {
+    return `<header><div class="toprow">
+        <button class="back" data-act="home" aria-label="${T('home')}">‹</button>
+        <span class="chip">${T('club')}</span>
+      </div></header>`
+      + `<div class="view"><div class="card">
+          <p class="muted">${T('clubNeedsPairing')}</p>
+          <p class="muted" style="margin-top:8px">${T('localOnlyLong')}</p>
+        </div></div>`;
+  }
+
+  const invite = s_club.invite;
+  const members = s_club.members;
+  // Revoked members keep their record, but they are not the current club:
+  // show them as a count, not as rows a coach has to scroll past.
+  const revoked = (members || []).filter((m) => m.revokedAt).length;
+  const rows = (members || []).filter((m) => !m.revokedAt).map((m) => {
+    return `<div class="row plain">
+      <span class="slot">●</span>
+      <span class="nm as-text">${esc(m.name)}<span class="no">${esc(roleLabel(m.role))}</span></span>
+      ${m.role === 'owner' ? `<span class="chip">${T('roleOwner')}</span>`
+        : `<button class="rbtn wide" data-act="revokemember:${m.id}">${T('revoke')}</button>`}
+    </div>`;
+  }).join('');
+
+  return `<header>
+      <div class="toprow">
+        <button class="back" data-act="home" aria-label="${T('home')}">‹</button>
+        <span class="chip">${T('club')}</span>
+        <span class="grow"></span>
+        <button class="chip period" data-act="refreshmembers">↻</button>
+      </div>
+      <div style="font-size:17px;font-weight:700;margin-top:2px">
+        ${esc(pairing?.tenant?.name || club().name || T('app'))}
+      </div>
+    </header>
+    <div class="view">
+      ${s_club.error ? `<div class="robanner"><span class="dot"></span>${esc(s_club.error)}</div>` : ''}
+      <div class="card">
+        <h3>${T('coaches')}</h3>
+        ${members === null ? `<p class="muted">…</p>` : (rows || `<p class="muted">${T('noCoaches')}</p>`)}
+        ${revoked ? `<p class="muted" style="margin-top:8px">${T('removedCount', { n: revoked })}</p>` : ''}
+      </div>
+
+      ${!canInvite() ? '' : invite ? `<div class="card">
+        <h3>${T('inviteReady')}</h3>
+        <p class="muted" style="margin-bottom:8px">${T('inviteHint')}</p>
+        <input readonly value="${esc(invite.url)}" onclick="this.select()" style="font-size:12px">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn wide" data-act="copylink">${T('copyLink')}</button>
+          <button class="btn wide" data-act="revokeinvite:${invite.id}">${T('revokeLink')}</button>
+        </div>
+      </div>` : `<div class="card">
+        <button class="btn primary wide" data-act="newinvite" ${s_club.busy ? 'disabled' : ''}>
+          ${s_club.busy ? '…' : T('inviteCoach')}
+        </button>
+        <p class="muted" style="margin-top:8px">${T('inviteExplain')}</p>
+      </div>`}
+
+      ${(s_club.invites || []).length ? `<div class="card">
+        <h3>${T('pendingInvites')}</h3>
+        ${s_club.invites.map((i) => `<div class="row plain">
+          <span class="slot">·</span>
+          <span class="nm as-text">${esc(roleLabel(i.role))}<span class="no">${esc(String(i.expiresAt || '').slice(0, 10))}</span></span>
+          <button class="rbtn wide" data-act="revokeinvite:${i.id}">${T('revoke')}</button>
+        </div>`).join('')}
+      </div>` : ''}
+
+      <div class="card">
+        <h3>${T('thisDevice')}</h3>
+        <p class="muted">${T('pairedAs', { name: pairing?.member?.name || '—' })}</p>
+        <button class="btn wide" data-act="unpair" style="margin-top:10px">${T('unpair')}</button>
+      </div>
+    </div>`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -575,6 +767,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 
 function routeNow() {
   if (s.join) return 'join';
+  if (s.route === 'club') return 'club';
   if (!s.clubs.length || !s.people.length) return 'setup';
   if (s.creating) return 'setup';
   if (s.route === 'team' && s.editingTeam) return 'team';
@@ -601,6 +794,7 @@ function render() {
   const route = routeNow();
 
   if (route === 'join') app.innerHTML = viewJoin();
+  else if (route === 'club') app.innerHTML = viewClub();
   else if (route === 'live') app.innerHTML = viewLive();
   else if (route === 'team') app.innerHTML = viewTeam();
   else if (route === 'plan') app.innerHTML = viewPlan();
@@ -790,7 +984,8 @@ function viewSetup() {
   const seasonBar = seasonScoped && s.seasons.length
     ? pickerBar() + closedBanner(selectedSeason())
     : '';
-  const lang = `${syncChip()}<button class="chip period" data-act="lang">${T('language')}</button>`;
+  const lang = `<button class="chip period" data-act="club">${T('club')}</button>`
+    + syncChip() + `<button class="chip period" data-act="lang">${T('language')}</button>`;
   return headerPlain(club().name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
     + `<div class="view"><div class="tabs">${tabs}</div>${seasonBar}<div class="setup">${body}</div></div>`;
 }
@@ -1141,7 +1336,11 @@ function viewLive() {
   const bench = benchList(p, squad()).map((x) =>
     playerRow(p, { slot: null, playerId: x.id, minMs: x.minMs }, true, ro));
 
-  return headerLive(p) + (ro ? readOnlyBanner() : (paired() ? '' : localBanner()))
+  // A quiet lease outranks the plain read-only note: it is the more urgent fact
+  // and it carries the offer to take the match over.
+  const quiet = paired() && leaseNow().state === 'stale';
+  return headerLive(p)
+    + (quiet ? quietBanner() : ro ? readOnlyBanner() : (paired() ? '' : localBanner()))
     + `<div class="view">
         ${blockStrip(p)}
         <div class="sechead"><span>${T('onField')} (${on.length})</span><span>${T('min')}</span></div>
@@ -1154,9 +1353,24 @@ function viewLive() {
 
 /** Someone else is recording: say who, and offer the deliberate switch. */
 function readOnlyBanner() {
-  const name = leaseNow().name || T('anotherCoach');
+  const lease = leaseNow();
+  const name = lease.name || T('anotherCoach');
+  const quiet = Math.round((Date.now() - Number(remote.lease?.seenAt || Date.now())) / 1000);
   return `<div class="robanner"><span class="dot"></span>
     <span class="grow">${esc(T('readOnlyBy', { name }))}</span>
+    <button class="rbtn wide" data-act="takeover">${T('takeOver')}</button>
+  </div>`;
+}
+
+/**
+ * The recorder has gone quiet — phone died, battery, tunnel. The lease is
+ * claimable, but taking the pen is a decision, never a side effect.
+ */
+function quietBanner() {
+  const name = leaseNow().name || T('anotherCoach');
+  const quiet = Math.max(0, Math.round((Date.now() - Number(remote.lease?.seenAt || Date.now())) / 1000));
+  return `<div class="strip local"><span class="dot"></span>
+    <span class="grow">${esc(T('recorderQuiet', { name, s: quiet }))}</span>
     <button class="rbtn wide" data-act="takeover">${T('takeOver')}</button>
   </div>`;
 }
@@ -1894,6 +2108,20 @@ function handle(ev) {
       return;
     }
     case 'dojoin': if (form) redeemJoin(new FormData(form)); return;
+    case 'club': s.route = 'club'; s.sheet = null; loadMembers(); render(); return;
+    case 'newinvite': makeInvite(); return;
+    case 'refreshmembers': loadMembers(); return;
+    case 'revokeinvite': revokeInviteLink(a); return;
+    case 'revokemember': revokeMember(a); return;
+    case 'unpair': unpairThisDevice(); return;
+    case 'copylink': {
+      const url = s_club.invite?.url;
+      if (!url) return;
+      (navigator.clipboard?.writeText(url) || Promise.reject())
+        .then(() => showToast('✓ ' + T('copied'), null))
+        .catch(() => showToast(T('copyManually'), null));
+      return;
+    }
 
     case 'tab': s.tab = a; s.toast = null; render(); return;
     case 'lang': switchLang(); return;
@@ -2283,10 +2511,11 @@ if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
 // Read-only handle for the end-to-end suite, so tests can assert on state
 // rather than scrape the DOM. Holds nothing the page does not already hold.
 globalThis.__mm = {
-  state: s, remote, sync, pairing: () => pairing, outbox,
+  state: s, remote, sync, pairing: () => pairing, outbox, render,
 };
 
 render();
+if (s.join) loadJoinPreview();
 if (paired()) hydrateFromClub();
 setInterval(tick, 250);
 

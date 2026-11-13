@@ -1,5 +1,5 @@
 /* App shell cache. Bump VERSION whenever a shell file changes. */
-const VERSION = 'mm-v7';
+const VERSION = 'mm-v8';
 const SHELL = [
   './',
   './index.html',

@@ -200,7 +200,13 @@ async function createInvite(request, env, auth) {
   if (!['coach', 'team_admin'].includes(role)) return fail(400, 'invalid_role', 'role must be coach or team_admin.');
   if (auth.role === 'team_admin') {
     if (role !== 'coach') return fail(403, 'forbidden', 'Team admins can only invite coaches.');
-    if (!teamId || !(await canWriteTeam(env, auth, teamId))) return fail(403, 'forbidden', 'Not your team.');
+    // A team admin is normally scoped to their team and may only invite into
+    // it. One with no team scope is a club admin in all but name, and may
+    // invite coaches to the club — the same rule that lets them write anywhere.
+    const scope = await memberTeams(env, auth);
+    if (scope.length && (!teamId || !(await canWriteTeam(env, auth, teamId)))) {
+      return fail(403, 'forbidden', 'Not your team.');
+    }
   }
 
   const token = newToken();
@@ -217,6 +223,44 @@ async function createInvite(request, env, auth) {
     url: `${env.APP_URL || 'https://kbottsson.com'}/join#${token}`,
     token,
   }, 201);
+}
+
+/**
+ * What a coach is about to walk into, before the invite is spent.
+ *
+ * Unauthenticated on purpose: the invite token is the credential, and the
+ * person holding it can join anyway. It reveals the club name, the team and
+ * how many players are already there — nothing about who they are.
+ */
+async function previewInvite(request, env, rawToken) {
+  if (!rawToken) return fail(400, 'invalid_input', 'An invite token is required.');
+
+  const invite = await env.DB.prepare(`
+    SELECT id, tenant, role, team_id, expires_at, max_uses, uses, revoked_at
+      FROM invites WHERE token_hash = ?1
+  `).bind(await sha256(rawToken)).first();
+
+  if (!invite) return fail(410, 'invite_invalid', 'This link is not valid.');
+  if (invite.revoked_at) return fail(410, 'invite_revoked', 'This link has been revoked.');
+  if (invite.expires_at <= nowIso()) return fail(410, 'invite_expired', 'This link has expired.');
+  if (invite.uses >= invite.max_uses) return fail(410, 'invite_used', 'This link has already been used.');
+
+  const tenant = await env.DB.prepare('SELECT id, name FROM tenants WHERE id = ?1').bind(invite.tenant).first();
+  if (!tenant) return fail(410, 'tenant_missing', 'That club no longer exists.');
+
+  let clubPlayers = 0;
+  const model = await env.DB.prepare("SELECT body FROM docs WHERE tenant = ?1 AND kind = 'model'")
+    .bind(invite.tenant).first();
+  if (model) {
+    try { clubPlayers = (JSON.parse(model.body).people || []).length; } catch { clubPlayers = 0; }
+  }
+
+  return json({
+    club: tenant.name,
+    role: invite.role,
+    teamId: invite.team_id || null,
+    clubPlayers,
+  });
 }
 
 async function revokeMember(request, env, auth, memberId) {
@@ -526,6 +570,10 @@ async function handle(request, env) {
   if (path === '/api/bootstrap' && request.method === 'POST') return bootstrap(request, env);
   if (path === '/api/auth/redeem' && request.method === 'POST') return redeem(request, env);
 
+  // Before the auth gate: the token in the path is the credential.
+  let m = /^\/api\/invites\/([\w-]+)\/preview$/.exec(path);
+  if (m && request.method === 'GET') return previewInvite(request, env, m[1]);
+
   if (!path.startsWith('/api/')) {
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return fail(404, 'not_found', 'No assets binding configured.');
@@ -541,7 +589,7 @@ async function handle(request, env) {
   if (path === '/api/events' && request.method === 'POST') return postEvents(request, env, auth);
   if (path === '/api/sync' && request.method === 'GET') return sync(request, env, auth);
 
-  let m = /^\/api\/members\/([\w-]+)$/.exec(path);
+  m = /^\/api\/members\/([\w-]+)$/.exec(path);
   if (m && request.method === 'DELETE') return revokeMember(request, env, auth, m[1]);
 
   m = /^\/api\/invites\/([\w-]+)$/.exec(path);
