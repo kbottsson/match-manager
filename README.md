@@ -5,7 +5,7 @@ Playing time, substitutions, goals and assists for 7-a-side youth football
 
 ## Live
 
-- **App** — https://kbottsson.com
+- **App** — https://match.kbottsson.com
 - **API** — https://api.kbottsson.com (health: `/api/health`)
 
 The app is served as Workers static assets from `public/`; the API is the same

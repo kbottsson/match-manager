@@ -15,12 +15,8 @@
   ],
   "routes": [
     {
-      "pattern": "kbottsson.com/*",
-      "zone_name": "kbottsson.com"
-    },
-    {
-      "pattern": "www.kbottsson.com/*",
-      "zone_name": "kbottsson.com"
+      "pattern": "match.kbottsson.com",
+      "custom_domain": true
     },
     {
       "pattern": "api.kbottsson.com",
@@ -29,7 +25,7 @@
   ],
   "workers_dev": true,
   "vars": {
-    "APP_URL": "https://kbottsson.com"
+    "APP_URL": "https://match.kbottsson.com"
   },
   "assets": {
     "directory": "./public",
