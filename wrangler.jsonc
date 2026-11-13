@@ -1,0 +1,17 @@
+// Fill database_id after: npx wrangler d1 create match-manager
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "match-manager-api",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-11-01",
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "match-manager",
+      "database_id": "TO_FILL_AFTER_CREATE"
+    }
+  ]
+}
