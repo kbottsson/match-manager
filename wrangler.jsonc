@@ -19,5 +19,8 @@
       "custom_domain": true
     }
   ],
-  "workers_dev": true
+  "workers_dev": true,
+  "vars": {
+    "APP_URL": "https://kbottsson.github.io/match-manager"
+  }
 }
