@@ -87,6 +87,20 @@ async function main() {
     await sleep(150);
   }
 
+  // A page that never booted would otherwise report every check below as a
+  // separate failure, which buries the one fact that matters.
+  if (!(await evaluate("document.querySelectorAll('.row').length"))) {
+    let status = 'unreachable';
+    try { status = (await fetch(BASE + '/')).status; } catch { /* ignore */ }
+    console.log('\n  ✖ the app did not boot — checks not run');
+    console.log(`    url   : ${BASE} → ${status}`);
+    console.log(`    title : ${await evaluate('document.title')}`);
+    console.log(`    text  : ${((await evaluate('document.body.innerText')) || '').slice(0, 200).replace(/\s+/g, ' ')}`);
+    cleanup();
+    ws.close();
+    process.exit(1);
+  }
+
   console.log('live screen');
   ok('seven on-field rows', (await evaluate("document.querySelectorAll('.view .list .row').length")) === 9);
   // The seeded match starts 7.2 minutes ago, so the clock is 07:12 plus however

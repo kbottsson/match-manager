@@ -93,6 +93,19 @@ async function main() {
 
   await booted();
 
+  // If the shell never rendered, every check below would fail for the same
+  // uninteresting reason. Say the interesting thing once and stop.
+  if (!(await evaluate("!!document.querySelector('.tabs')"))) {
+    let status = 'unreachable';
+    try { status = (await fetch(BASE)).status; } catch { /* ignore */ }
+    console.log('\n  ✖ the app did not boot — checks not run');
+    console.log(`    url   : ${BASE} → ${status}`);
+    console.log(`    title : ${await evaluate('document.title')}`);
+    console.log(`    text  : ${((await evaluate('document.body.innerText')) || '').slice(0, 200).replace(/\s+/g, ' ')}`);
+    cleanup();
+    process.exit(1);
+  }
+
   // ---- 0. a fresh install has no club at all -----------------------------
   console.log('fresh install');
   ok('empty install offers to start a season',
