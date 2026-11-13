@@ -8,12 +8,34 @@ import {
 } from './engine.js';
 import { createStore, uid } from './store.js';
 import { t, setLang, getLang, detectLang, pos as posLabel } from './i18n/index.js';
+import {
+  loadPairing, savePairing, clearPairing, createApi, createOutbox,
+  createController, leaseState,
+} from './sync.js';
 
 /* ------------------------------------------------------------------ *
  * state
  * ------------------------------------------------------------------ */
 
 const store = createStore();
+
+/* ---- sync (phase 2). Completely inert without a pairing token: D13. ---- */
+
+const outbox = createOutbox();
+const api = createApi({ getToken: () => loadPairing()?.token });
+
+/** null = unpaired. This device then never speaks to the network. */
+let pairing = null;
+/** What the server said about the live match's lease, and the last error seen. */
+const remote = { lease: null, error: null, at: null };
+/** Lets a test drive a pairing without touching the network. */
+const sync = createController({
+  api,
+  outbox,
+  onChange: (st) => { remote.error = st.lastError || remote.error; },
+  onArrive: (got) => applyRemote(got),
+});
+
 
 const s = {
   lang: 'sv',
@@ -58,11 +80,318 @@ const T = (key, vars) => t(key, vars);
 const P = (slot, field) => posLabel(slot, field);
 
 /* ------------------------------------------------------------------ *
+ * Sync — phase 2. Absent a token, every function here is a no-op (D13).
+ * ------------------------------------------------------------------ */
+
+const paired = () => !!pairing;
+
+/** The club's roster, teams and seasons, as one document. */
+function modelBody() {
+  return {
+    clubs: s.clubs, seasons: s.seasons, people: s.people, entries: s.entries,
+    teams: s.teams, clubId: s.clubId, seasonId: s.seasonId,
+  };
+}
+
+/** A match record. The server needs a teamId to decide who may write it. */
+function matchBody(match = s.match) {
+  return match ? { ...match, teamId: match.teamId || s.teams[0]?.id || '' } : null;
+}
+
+function planBody(matchId = s.match?.id) {
+  return { cells: store.loadPlan(matchId) };
+}
+
+let flushTimer = null;
+function flushSoon(delay = 500) {
+  if (!paired()) return;
+  clearTimeout(flushTimer);
+  flushTimer = setTimeout(() => { sync.flush().catch(() => {}); }, delay);
+}
+
+function pushEvents(events) {
+  if (!paired() || !s.match || !events?.length) return;
+  outbox.addEvents(s.match.id, events);
+  flushSoon();
+}
+
+function pushDoc(kind, id, body) {
+  if (!paired() || body == null) return;
+  outbox.addDoc(kind, id, body);
+  flushSoon();
+}
+
+/**
+ * Whatever another device wrote, applied quietly under the current screen.
+ * Documents win wholesale (a plan is a document); events merge by id so a
+ * late arrival never overwrites anything this phone did.
+ */
+function applyRemote(got) {
+  if (!got || !paired()) return;
+  let changed = false;
+
+  for (const doc of got.docs || []) {
+    if (doc.kind === 'match') {
+      store.saveMatch(doc.body);
+      if (s.match?.id === doc.id) s.match = doc.body;
+      changed = true;
+    } else if (doc.kind === 'plan') {
+      const cells = Array.isArray(doc.body) ? doc.body : (doc.body?.cells || []);
+      store.savePlan(doc.id, cells);
+      if (s.match?.id === doc.id) s.plan = cells;
+      changed = true;
+    } else if (doc.kind === 'model') {
+      // A device with no roster of its own takes the club's wholesale; a device
+      // that has one keeps its own until pairing decides (see adoptLocalIntoClub).
+      s.clubs = doc.body.clubs?.length ? doc.body.clubs : s.clubs;
+      s.seasons = doc.body.seasons?.length ? doc.body.seasons : s.seasons;
+      s.people = doc.body.people?.length ? doc.body.people : s.people;
+      s.entries = doc.body.entries?.length ? doc.body.entries : s.entries;
+      s.teams = doc.body.teams?.length ? doc.body.teams : s.teams;
+      persistModelLocal();
+      changed = true;
+    }
+  }
+
+  for (const e of got.events || []) {
+    if (!e?.matchId) continue;
+    const n = store.mergeEvents(e.matchId, [{
+      id: e.id, type: e.type, atMs: e.atMs, clockMs: e.clockMs ?? null,
+      period: e.period ?? null, payload: e.payload || {}, voidOf: e.voidOf || undefined,
+      author: e.author || null,
+    }]);
+    if (n) {
+      if (s.match?.id === e.matchId) s.events = store.loadEvents(e.matchId);
+      changed = true;
+    }
+  }
+
+  if (Array.isArray(got.lease)) {
+    remote.lease = s.match ? (got.lease.find((l) => l.matchId === s.match.id) || null) : null;
+    changed = true;
+  }
+  remote.at = Date.now();
+
+  // Never re-render underneath an open sheet: it would eat the tap in flight.
+  if (changed && !s.sheet) render();
+}
+
+/** The live match's lease, read against this device. */
+function leaseNow() {
+  return leaseState(remote.lease, pairing?.deviceId || null);
+}
+
+/**
+ * Read-only when someone else is recording and their heartbeat is fresh.
+ * A stale lease belongs to nobody, so the screen stays editable — the app must
+ * not lock a coach out because the other phone's battery died.
+ */
+function readOnly() {
+  return paired() && leaseNow().state === 'theirs';
+}
+
+/**
+ * Keeps the controller pointed at whatever is live. Called from render(), so
+ * every navigation re-evaluates it; it is idempotent.
+ */
+let syncStarting = false;
+let lastClaimAt = 0;
+
+/**
+ * Assert the pen, at most every couple of seconds.
+ *
+ * A single claim at match start is not enough: it can fail because the match
+ * document has not landed yet, and a viewer that never asks never learns it is
+ * a viewer. This is cheap and idempotent — the server answers 409 with the
+ * holder's name when someone else has it.
+ */
+async function maybeClaim(force = false) {
+  if (!paired() || !s.match || s.match.status !== 'live' || s.join) return null;
+  if (sync.state().lease?.mine && !force) return sync.state().lease;
+  if (!force && Date.now() - lastClaimAt < 2000) return null;
+  lastClaimAt = Date.now();
+  try {
+    const got = await sync.claim(force ? 'takeover' : 'heartbeat');
+    if (sync.state().lease) remote.lease = sync.state().lease;
+    if (got) sync.startHeartbeat();
+    if (!got) render();
+    return got;
+  } catch {
+    return null; // offline, or the match is not on the server yet — retried on the next render
+  }
+}
+
+/**
+ * Keeps the controller pointed at whatever is live. Called from render(), so
+ * every navigation re-evaluates it; it is idempotent.
+ */
+async function syncLifecycle() {
+  if (!paired()) return;
+  // Still pairing: the join screen must not start a match session underneath
+  // itself, or the first claim runs before the match document exists.
+  if (s.join) return;
+
+  const live = s.match?.status === 'live';
+  if (!live) {
+    if (sync.state().running) { sync.stopHeartbeat(); await sync.release(); sync.stop(); }
+    return;
+  }
+
+  const st = sync.state();
+  if (!(st.running && st.matchId === s.match.id)) {
+    if (syncStarting) return;
+    syncStarting = true;
+    try {
+      await sync.start(s.match.id);
+    } catch { /* offline start is fine; the claim retries */ }
+    finally { syncStarting = false; }
+  }
+  await maybeClaim();
+}
+
+/**
+ * The other direction: a freshly paired device learns the club's shape.
+ * Pull once, apply it, and land on the live match if there is one — otherwise
+ * a second phone would sit on an empty home screen until something changed.
+ */
+async function hydrateFromClub() {
+  if (!paired()) return;
+  try {
+    const got = await sync.pull();
+    if (got) applyRemote(got);
+  } catch { return; /* offline first-run is fine; the app is local-first */ }
+  if (!s.match) {
+    const live = store.listMatches().find((m) => m.status === 'live');
+    if (live) {
+      s.match = live;
+      s.plan = store.loadPlan(live.id);
+      s.events = store.loadEvents(live.id);
+      s.route = 'live';
+      render();
+    }
+  }
+}
+
+/**
+ * Pairing attaches, it does not replace (D12a rule 4): everything already on
+ * this device is pushed up as the club's starting state.
+ */
+async function adoptLocalIntoClub() {
+  // Learn the club before offering anything: a second phone pairing into an
+  // established club must not push its own empty roster over the real one.
+  let existing = null;
+  try { existing = await sync.pull(); } catch { /* first device, or offline */ }
+  if (existing) applyRemote(existing);
+
+  const docs = existing?.docs || [];
+  const has = (kind, id) => docs.some((d) => d.kind === kind && (d.id || '') === (id || ''));
+
+  const localModel = s.clubs.length > 0 || s.people.length > 0;
+  if (localModel && !has('model', '')) outbox.addDoc('model', '', modelBody(), '*');
+
+  for (const m of store.listMatches()) {
+    if (has('match', m.id)) continue;                 // the club already knows it
+    outbox.addDoc('match', m.id, matchBody(m), '*');
+    const cells = store.loadPlan(m.id);
+    if (cells.length && !has('plan', m.id)) outbox.addDoc('plan', m.id, { cells }, '*');
+    const events = store.loadEvents(m.id);
+    if (events.length) outbox.addEvents(m.id, events);
+  }
+  return sync.flush();
+}
+
+/* ------------------------------------------------------------------ *
+ * pairing entry point — /join#<token>
+ * ------------------------------------------------------------------ */
+
+function joinToken() {
+  if (pairing) return null;
+  if (location.pathname.replace(/\/+$/, '') !== '/join') return null;
+  const raw = (location.hash || '').replace(/^#/, '').trim();
+  return raw || null;
+}
+
+async function redeemJoin(form) {
+  const token = s.join?.token;
+  const name = String(form.get('name') || '').trim();
+  if (!token || !name) return;
+  s.join = { ...s.join, busy: true, error: null };
+  render();
+  try {
+    const res = await api.redeem(token, name, deviceLabel());
+    pairing = {
+      token: res.data.token,
+      tenant: res.data.tenant,
+      member: res.data.member,
+      deviceId: res.data.deviceId || null,
+      teamId: res.data.teamId || null,
+      pairedAt: new Date().toISOString(),
+    };
+    savePairing(pairing);
+    sync.setIdentity({ deviceId: pairing.deviceId, member: pairing.member, tenant: pairing.tenant, role: pairing.member.role });
+    await adoptLocalIntoClub();
+    await hydrateFromClub();
+    s.join = null;
+    history.replaceState(null, '', '/');
+    showToast(`✓ ${T('joined')} ${esc(res.data.tenant.name)}`, null);
+  } catch (err) {
+    s.join = { ...s.join, busy: false, error: err.code || 'network' };
+    render();
+  }
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad/.test(ua)) return 'iPhone';
+  if (/Android/.test(ua)) return 'Android phone';
+  if (/Macintosh/.test(ua)) return 'Mac';
+  return 'Browser';
+}
+
+function viewJoin() {
+  const j = s.join || {};
+  const err = j.error ? `<div class="robanner">${esc(T('joinFailed'))} · ${esc(j.error)}</div>` : '';
+  return `<header>
+    <div class="toprow"><span class="chip">${T('joinClub')}</span></div>
+    <div style="font-size:17px;font-weight:700;margin-top:4px">${T('joinTitle')}</div>
+  </header>
+  <div class="view">
+    ${err}
+    <div class="card">
+      <p class="muted" style="margin:0 0 12px">${T('joinExplain')}</p>
+      <form data-form="join">
+        <label class="lbl2" for="jn">${T('yourName')}</label>
+        <input id="jn" name="name" autocomplete="given-name" required ${j.busy ? 'disabled' : ''}>
+        <button class="btn primary" data-act="dojoin" ${j.busy ? 'disabled' : ''} style="margin-top:14px">
+          ${j.busy ? '…' : T('joinBtn')}
+        </button>
+      </form>
+    </div>
+  </div>`;
+}
+
+/** The small, honest state of this device: local only, or in the club. */
+function syncChip() {
+  return paired()
+    ? `<span class="chip synced dot">${T('inClub')}</span>`
+    : `<span class="chip local dot">${T('localOnly')}</span>`;
+}
+
+/* ------------------------------------------------------------------ *
  * persistence
  * ------------------------------------------------------------------ */
 
 function boot() {
   s.lang = store.loadLang() || detectLang();
+  pairing = loadPairing();
+  if (pairing) {
+    sync.setIdentity({
+      deviceId: pairing.deviceId, member: pairing.member,
+      tenant: pairing.tenant, role: pairing.member?.role,
+    });
+  }
+  const tok = joinToken();
+  if (tok) s.join = { token: tok };
   setLang(s.lang);
   migrateToSeasons();
   // Land on the live match only; everything else is opened from the list.
@@ -75,12 +404,18 @@ function boot() {
   document.documentElement.lang = s.lang;
 }
 
-function persistModel() {
+/** Writes the club model to this device only. */
+function persistModelLocal() {
   store.saveClubs(s.clubs);
   store.saveSeasons(s.seasons);
   store.savePeople(s.people);
   store.saveEntries(s.entries);
   store.saveTeams(s.teams);
+}
+
+function persistModel() {
+  persistModelLocal();
+  pushDoc('model', '', modelBody());
 }
 
 /**
@@ -142,6 +477,7 @@ function switchLang() {
 function saveMatch(match = s.match) {
   if (!match) return;
   store.saveMatch(match);
+  pushDoc('match', match.id, matchBody(match));
 }
 
 /**
@@ -149,6 +485,9 @@ function saveMatch(match = s.match) {
  */
 function act(type, payload = {}, { silent = false } = {}) {
   if (!s.match) return null;
+  // Someone else is recording and their heartbeat is fresh: this screen is a
+  // viewer, so nothing must be written to the log.
+  if (readOnly()) return null;
   const p = proj();
   const ev = {
     id: uid(),
@@ -163,6 +502,7 @@ function act(type, payload = {}, { silent = false } = {}) {
   // in-memory copy identical to what was persisted.
   const saved = store.appendEvent(s.match.id, ev);
   s.events.push(saved || ev);
+  pushEvents([saved || ev]);
   if (!silent) {
     const summary = describe(ev);
     if (summary) showToast(summary, ev.id);
@@ -172,8 +512,9 @@ function act(type, payload = {}, { silent = false } = {}) {
 
 function undoEvent(evId) {
   if (!s.match) return;
+  if (readOnly()) return;
   const v = store.voidEvent(s.match.id, evId);
-  if (v) s.events.push(v);
+  if (v) { s.events.push(v); pushEvents([v]); }
   s.toast = null;
   render();
 }
@@ -233,6 +574,7 @@ const player = (id) => {
 const esc = (v) => String(v ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function routeNow() {
+  if (s.join) return 'join';
   if (!s.clubs.length || !s.people.length) return 'setup';
   if (s.creating) return 'setup';
   if (s.route === 'team' && s.editingTeam) return 'team';
@@ -258,7 +600,8 @@ function render() {
   // straight back into the live match.
   const route = routeNow();
 
-  if (route === 'live') app.innerHTML = viewLive();
+  if (route === 'join') app.innerHTML = viewJoin();
+  else if (route === 'live') app.innerHTML = viewLive();
   else if (route === 'team') app.innerHTML = viewTeam();
   else if (route === 'plan') app.innerHTML = viewPlan();
   else if (route === 'recap') app.innerHTML = viewRecap(s.recapId ? store.loadMatch(s.recapId) : null);
@@ -272,6 +615,7 @@ function render() {
       ? `<button data-act="undo:${s.toast.evId}">${T('undo')}</button>` : '';
     app.insertAdjacentHTML('beforeend', `<div class="toast">${s.toast.html}${undo}</div>`);
   }
+  syncLifecycle();
 }
 
 /* ------------------------------------------------------------------ *
@@ -446,7 +790,7 @@ function viewSetup() {
   const seasonBar = seasonScoped && s.seasons.length
     ? pickerBar() + closedBanner(selectedSeason())
     : '';
-  const lang = `<button class="chip period" data-act="lang">${T('language')}</button>`;
+  const lang = `${syncChip()}<button class="chip period" data-act="lang">${T('language')}</button>`;
   return headerPlain(club().name || T('app'), T('tab' + s.tab[0].toUpperCase() + s.tab.slice(1)), lang)
     + `<div class="view"><div class="tabs">${tabs}</div>${seasonBar}<div class="setup">${body}</div></div>`;
 }
@@ -776,26 +1120,28 @@ function blockStrip(p) {
     .map((b, i) => `<div class="blk${i === cur ? ' on' : ''}">${b.label}</div>`).join('')}</div>`;
 }
 
-function playerRow(p, { slot, playerId, minMs }, bench = false) {
+function playerRow(p, { slot, playerId, minMs }, bench = false, ro = false) {
   const pl = player(playerId);
-  const goal = bench ? '' : `<button class="rbtn goal" data-act="goal:${playerId}" aria-label="${T('goal')}">⚽</button>`;
+  const goal = bench || ro ? '' : `<button class="rbtn goal" data-act="goal:${playerId}" aria-label="${T('goal')}">⚽</button>`;
+  const subBtn = ro ? '' : `<button class="rbtn" data-act="sub:${playerId}" aria-label="${T('sub')}">⇄</button>`;
   return `<div class="row${slot === 'G' ? ' keeper' : ''}">
     <span class="slot"${bench ? ' style="color:#bcb5a8"' : ''}>${bench ? '·' : P(slot)}</span>
     <button class="nm" data-act="player:${playerId}">${esc(pl.name)}<span class="no">${esc(pl.no)}</span></button>
     <span class="min">${fmtMin(minMs)}</span>
     ${goal}
-    <button class="rbtn" data-act="sub:${playerId}" aria-label="${T('sub')}">⇄</button>
+    ${subBtn}
   </div>`;
 }
 
 function viewLive() {
   const p = proj();
   const c = config();
-  const on = onFieldList(p).map((x) => playerRow(p, x));
+  const ro = readOnly();
+  const on = onFieldList(p).map((x) => playerRow(p, x, false, ro));
   const bench = benchList(p, squad()).map((x) =>
-    playerRow(p, { slot: null, playerId: x.id, minMs: x.minMs }, true));
+    playerRow(p, { slot: null, playerId: x.id, minMs: x.minMs }, true, ro));
 
-  return headerLive(p)
+  return headerLive(p) + (ro ? readOnlyBanner() : (paired() ? '' : localBanner()))
     + `<div class="view">
         ${blockStrip(p)}
         <div class="sechead"><span>${T('onField')} (${on.length})</span><span>${T('min')}</span></div>
@@ -803,10 +1149,27 @@ function viewLive() {
         <div class="sechead"><span>${T('bench')} (${bench.length})</span><span>${T('min')}</span></div>
         <div class="list">${bench.join('') || '<div class="empty">—</div>'}</div>
       </div>
-      ${actionBar(p, c)}`;
+      ${actionBar(p, c, ro)}`;
 }
 
-function actionBar(p, c) {
+/** Someone else is recording: say who, and offer the deliberate switch. */
+function readOnlyBanner() {
+  const name = leaseNow().name || T('anotherCoach');
+  return `<div class="robanner"><span class="dot"></span>
+    <span class="grow">${esc(T('readOnlyBy', { name }))}</span>
+    <button class="rbtn wide" data-act="takeover">${T('takeOver')}</button>
+  </div>`;
+}
+
+/** No token: nothing here is backed up, and nobody else can see it (D13). */
+function localBanner() {
+  return `<div class="strip local"><span class="dot"></span>${esc(T('localOnlyLong'))}</div>`;
+}
+
+function actionBar(p, c, ro = false) {
+  if (ro) {
+    return `<div class="actions"><button class="btn start" data-act="takeover">${T('takeOver')}</button></div>`;
+  }
   const lastPeriod = p.period >= c.periodCount;
 
   if (p.state === 'idle' || p.state === 'ended') {
@@ -1511,8 +1874,26 @@ function handle(ev) {
   const p = proj();
   const form = el.closest('form');
 
+  // A viewer may look, and may take over — nothing else (D2).
+  const READ_SAFE = new Set(['noop', 'tab', 'lang', 'nav', 'home', 'resume', 'openmatch',
+    'plansheet', 'periodsheet', 'openrecap', 'closerecap', 'player', 'takeover']);
+  if (readOnly() && !READ_SAFE.has(action)) {
+    showToast(`○ ${T('readOnlyBy', { name: leaseNow().name || T('anotherCoach') })}`, null);
+    return;
+  }
+
   switch (action) {
     case 'noop': return;
+    case 'takeover': {
+      if (!paired() || !s.match) return;
+      (async () => {
+        const got = await maybeClaim(true);
+        if (got) showToast(`● ${T('recordingNow')}`, null);
+        render();
+      })();
+      return;
+    }
+    case 'dojoin': if (form) redeemJoin(new FormData(form)); return;
 
     case 'tab': s.tab = a; s.toast = null; render(); return;
     case 'lang': switchLang(); return;
@@ -1667,6 +2048,7 @@ function handle(ev) {
     case 'saveteam': if (form) saveTeamForm(form); return;
     case 'saveplan': {
       saveMatch();
+      pushDoc('plan', s.match?.id, planBody());
       s.route = null;
       showToast(`✓ ${T('saved')}`, null);
       return;
@@ -1898,8 +2280,23 @@ if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
   s.match.status = 'setup';
   s.route = 'plan';
 }
+// Read-only handle for the end-to-end suite, so tests can assert on state
+// rather than scrape the DOM. Holds nothing the page does not already hold.
+globalThis.__mm = {
+  state: s, remote, sync, pairing: () => pairing, outbox,
+};
+
 render();
+if (paired()) hydrateFromClub();
 setInterval(tick, 250);
 
 // Re-project when the tab wakes: the clock is wall-clock derived.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+document.addEventListener('visibilitychange', () => {
+  sync.setHidden(document.hidden);
+  if (!document.hidden) { render(); sync.now(); }
+});
+
+// Coming back online is the one moment worth a forced flush and poll.
+addEventListener('online', () => { sync.flush().catch(() => {}); sync.now(); });
+// Leaving the page: try to land whatever is queued before the tab goes.
+addEventListener('pagehide', () => { sync.flush().catch(() => {}); });

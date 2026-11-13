@@ -137,6 +137,7 @@ async function redeem(request, env) {
 
   return json({
     token,
+    deviceId,
     tenant,
     member: { id: memberId, name, role: invite.role },
     teamId: invite.team_id || null,
@@ -147,6 +148,7 @@ async function me(request, env, auth) {
   const tenant = await env.DB.prepare('SELECT id, name FROM tenants WHERE id = ?1').bind(auth.tenant).first();
   return json({
     tenant,
+    deviceId: auth.deviceId,
     member: { id: auth.memberId, name: auth.name, role: auth.role },
     teams: await memberTeams(env, auth),
   });
@@ -262,6 +264,34 @@ async function createViewLink(request, env, auth) {
   `).bind(auth.tenant, id, await sha256(token), teamId, auth.memberId, nowIso(), expiresAt).run();
 
   return json({ id, teamId, expiresAt, url: `${env.APP_URL || 'https://kbottsson.com'}/watch#${token}`, token }, 201);
+}
+
+/**
+ * Revoking an invite matters more than it looks: an invite is a bearer token,
+ * and the usual reason to revoke one is that it went to the wrong person.
+ * Without this, the only remedy is waiting for it to expire.
+ */
+async function revokeInvite(request, env, auth, inviteId) {
+  if (RANK[auth.role] < RANK.team_admin) return fail(403, 'forbidden', 'Only admins can revoke an invite.');
+
+  const invite = await env.DB.prepare('SELECT id, role, team_id, revoked_at FROM invites WHERE tenant = ?1 AND id = ?2')
+    .bind(auth.tenant, inviteId).first();
+  if (!invite) return fail(404, 'not_found', 'No such invite.');
+  if (invite.role === 'owner' && auth.role !== 'owner') return fail(403, 'forbidden', 'Only an owner can revoke an owner invite.');
+
+  if (auth.role === 'team_admin') {
+    if (invite.role !== 'coach') return fail(403, 'forbidden', 'Team admins can only revoke coach invites.');
+    if (invite.team_id) {
+      const shared = await env.DB.prepare(
+        'SELECT 1 AS ok FROM member_teams WHERE tenant = ?1 AND member_id = ?2 AND team_id = ?3',
+      ).bind(auth.tenant, auth.memberId, invite.team_id).first();
+      if (!shared) return fail(403, 'forbidden', 'Not yours to revoke.');
+    }
+  }
+
+  await env.DB.prepare('UPDATE invites SET revoked_at = ?1 WHERE tenant = ?2 AND id = ?3')
+    .bind(nowIso(), auth.tenant, inviteId).run();
+  return json({ id: inviteId, revoked: true });
 }
 
 async function revokeViewLink(request, env, auth, id) {
@@ -513,6 +543,9 @@ async function handle(request, env) {
 
   let m = /^\/api\/members\/([\w-]+)$/.exec(path);
   if (m && request.method === 'DELETE') return revokeMember(request, env, auth, m[1]);
+
+  m = /^\/api\/invites\/([\w-]+)$/.exec(path);
+  if (m && request.method === 'DELETE') return revokeInvite(request, env, auth, m[1]);
 
   m = /^\/api\/view-links\/([\w-]+)$/.exec(path);
   if (m && request.method === 'DELETE') return revokeViewLink(request, env, auth, m[1]);

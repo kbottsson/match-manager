@@ -95,3 +95,11 @@ Tests: `tests/engine.test.mjs` — 18 passing.
 - **Append-only:** nothing is ever edited or deleted in the event log; corrections are new events (`void`).
 - **No build step:** if a change needs a bundler, the change is wrong.
 - **Commit per task**, tests green before the next one.
+
+## Sync client — done
+
+- `public/sync.js`: pairing, API client with a hard request timeout, persistent
+  outbox, serialised drain, poll cadence, lease state.
+- `public/app.js`: join screen, adoption on pairing, hydrate on boot, lease
+  claim and takeover, read-only viewer, local-only banner.
+- Poll pauses when hidden; `online` and foreground force a flush and a pull.

@@ -1,3 +1,24 @@
+## Status
+
+**Implemented and tested.** Server: `worker/`. Client: `public/sync.js`,
+wired into `public/app.js`. Tests: `tests/sync.test.mjs` (unit) and
+`tests/sync.e2e.mjs` (two real browsers against a real Worker and D1).
+
+Settled during the build, where this document had only intent:
+
+- `POST /api/auth/redeem` and `GET /api/me` both return `deviceId`. Without it a
+  phone cannot tell its own lease from another's, and every paired device looks
+  like a viewer.
+- A coach invited **without** a team is club-wide, not powerless. Team scoping
+  narrows a coach's reach; it does not gate it. Otherwise a coach invited before
+  the teams exist can write nothing.
+- `DELETE /api/invites/:id` — an invite is a bearer token, and the usual reason
+  to revoke one is that it reached the wrong person.
+- The worker's error envelope is `{ error: 'code', message, ...details }` — a
+  string code. The client accepts that and the nested form.
+
+---
+
 # Phase 2 — sync schema and API
 
 Status: draft for review · 2026-11-11 (rev 2)

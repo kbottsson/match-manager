@@ -110,6 +110,22 @@ export function createStore(storage = globalThis.localStorage) {
     },
 
     /**
+     * Merges events that arrived from another device. Their atMs is already
+     * authoritative and strictly ordered by the writer, so they are never
+     * re-stamped here — only duplicates are dropped, by id.
+     * Returns how many were new.
+     */
+    mergeEvents(matchId, incoming) {
+      if (!incoming?.length) return 0;
+      const all = asArray(read(K.events(matchId), []));
+      const have = new Set(all.map((e) => e.id));
+      const fresh = incoming.filter((e) => e && e.id && !have.has(e.id));
+      if (!fresh.length) return 0;
+      all.push(...fresh);
+      return write(K.events(matchId), all) ? fresh.length : 0;
+    },
+
+    /**
      * Soft-deletes by appending a void event. The original stays in the log —
      * that is what makes undo exact and the history auditable.
      */

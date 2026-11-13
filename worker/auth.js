@@ -75,12 +75,20 @@ export async function memberTeams(env, auth) {
   return (rows.results || []).map((r) => r.team_id);
 }
 
+/**
+ * Team scoping narrows a coach's reach; it does not gate it. A coach invited
+ * without a team is a club-wide coach — otherwise a coach invited before the
+ * teams exist could write nothing at all.
+ */
 export async function canWriteTeam(env, auth, teamId) {
   if (auth.role === 'viewer') return false;
   if (auth.role === 'owner') return true;
   if (!teamId) return false;
-  const row = await env.DB.prepare(
-    'SELECT 1 AS ok FROM member_teams WHERE tenant = ?1 AND member_id = ?2 AND team_id = ?3',
-  ).bind(auth.tenant, auth.memberId, teamId).first();
-  return !!row;
+
+  const scope = await env.DB.prepare(
+    'SELECT team_id FROM member_teams WHERE tenant = ?1 AND member_id = ?2',
+  ).bind(auth.tenant, auth.memberId).all();
+  const teams = (scope.results || []).map((r) => r.team_id);
+  if (!teams.length) return true;        // unscoped: the whole club
+  return teams.includes(teamId);
 }

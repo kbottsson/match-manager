@@ -13,6 +13,23 @@ Worker, behind `/api/*`. One origin, so no CORS and no split deployment.
 
 Built for one coach on one phone, on a touchline, in the cold, with no signal.
 
+## Sync (phase 2)
+
+The app is open to anyone; the boundary is **storage**, not entry (D13).
+
+- **Unpaired** — a complete app in `localStorage`. No token, so it never calls a
+  write endpoint. Says so on screen. Nothing is backed up.
+- **Paired** — the device carries a token from an invite link (`/join#…`). The
+  first pairing *adopts* the season already on the phone and pushes it up.
+- **One recorder per match** — the server holds a 60-second lease. Whoever holds
+  it writes; everyone else is `○ VIEW` and sees who is recording, with an
+  explicit **Take over**.
+- **Viewers poll** every 5 s while the match is live and visible; paused when
+  hidden, backed off 5→10→20→30 s on failure, forced on `online` and on return.
+- **Writes leave the phone through an outbox** that survives a reload, drains
+  documents before the events that depend on them, and never loses an event to a
+  failed request.
+
 ## What it does
 
 - **Squad** — add players once; reused every match.

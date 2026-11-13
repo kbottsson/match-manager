@@ -180,6 +180,13 @@ async function main() {
   const claim = await req('POST', '/api/matches/m9/lease', { token: amanda, body: { action: 'claim' } });
   eq('claim succeeds', claim.body.mine, true);
 
+  const revocable = await req('POST', '/api/members/invite', { token: owner, body: { role: 'coach', name: 'Wrong person' } });
+  eq('an invite can be created', revocable.status, 201);
+  const revokedInvite = await req('DELETE', `/api/invites/${revocable.body.id}`, { token: owner });
+  eq('and revoked before it is used', revokedInvite.status, 200);
+  const usedAfterRevoke = await req('POST', '/api/auth/redeem', { body: { invite: revocable.body.token, name: 'Wrong person' } });
+  eq('a revoked invite cannot be redeemed', usedAfterRevoke.status, 410);
+
   const coachInvite = await req('POST', '/api/members/invite', { token: owner, body: { role: 'coach', teamId: 't2' } });
   const coachRedeem = await req('POST', '/api/auth/redeem', { body: { invite: coachInvite.body.token, name: 'Sam' } });
   const sam = coachRedeem.body.token;
