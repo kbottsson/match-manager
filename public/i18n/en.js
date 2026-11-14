@@ -68,6 +68,8 @@ export default {
   blockLength: 'Block length',
   block7: '7 min',
   block5: '5 min',
+  block4: '4 min',
+  block3: '3 min',
   block10: '10 min',
   blockThirds: '6:40',
   spread: 'spread',

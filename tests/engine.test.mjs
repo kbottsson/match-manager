@@ -444,3 +444,18 @@ test('same-millisecond events resolve by id, deterministically', () => {
   assert.equal(one.score.for, 2);
   assert.deepEqual(one.timeline.map((e) => e.id), two.timeline.map((e) => e.id));
 });
+
+test('a 12-minute period in 3-minute blocks is four exact blocks', () => {
+  const layout = blockLayout({ periodCount: 3, periodMinutes: 12, blockMinutes: 3 });
+  assert.equal(layout.length, 12, 'three periods of four');
+  const first = layout.filter((b) => b.period === 1).map((b) => b.label);
+  assert.deepEqual(first, ['00–03', '03–06', '06–09', '09–12']);
+  assert.equal(layout.every((b) => b.lengthMs === 3 * MIN), true, 'no ragged final block');
+});
+
+test('a 3-minute block still distributes the whole match', () => {
+  const cfg = { periodCount: 3, periodMinutes: 12, blockMinutes: 3, slots: 7 };
+  const layout = blockLayout(cfg);
+  const total = layout.reduce((a, b) => a + b.lengthMs, 0);
+  assert.equal(total, 3 * 12 * MIN, 'every planned minute is accounted for');
+});

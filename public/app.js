@@ -1331,6 +1331,8 @@ function newMatchForm(onlyOption = false) {
         <select name="block">
           <option value="7" selected>${T('block7')}</option>
           <option value="5">${T('block5')}</option>
+          <option value="4">${T('block4')}</option>
+          <option value="3">${T('block3')}</option>
           <option value="10">${T('block10')}</option>
         </select></div>
       <div class="rowline" style="margin-top:4px">
