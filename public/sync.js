@@ -151,6 +151,8 @@ export function createApi({
     invite: (role = 'coach', teamId = null) =>
       call('POST', '/api/members/invite', { body: { role, ...(teamId ? { teamId } : {}) } }),
 
+    deviceLink: (label) => call('POST', '/api/devices/link', { body: { label } }),
+
     revokeInvite: (id) => call('DELETE', `/api/invites/${id}`),
 
     revokeMember: (id) => call('DELETE', `/api/members/${id}`),

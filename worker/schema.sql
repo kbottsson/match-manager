@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS invites (
   max_uses   INTEGER NOT NULL DEFAULT 1,
   uses       INTEGER NOT NULL DEFAULT 0,
   revoked_at TEXT,
+  kind       TEXT NOT NULL DEFAULT 'member',
+  member_id  TEXT,
   PRIMARY KEY (tenant, id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS invites_token ON invites (token_hash);

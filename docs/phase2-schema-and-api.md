@@ -12,6 +12,12 @@ Settled during the build, where this document had only intent:
 - A coach invited **without** a team is club-wide, not powerless. Team scoping
   narrows a coach's reach; it does not gate it. Otherwise a coach invited before
   the teams exist can write nothing.
+- `POST /api/devices/link` — a one-hour, single-use link that adds **a device**
+  to the member who asked, rather than a new member. Invites and device links
+  share the `invites` table, distinguished by `kind` (`member` | `device`) and
+  `member_id`.
+- `GET /api/invites/:token/preview` — unauthenticated; the join screen shows the
+  club and the roster size before the link is spent.
 - `DELETE /api/invites/:id` — an invite is a bearer token, and the usual reason
   to revoke one is that it reached the wrong person.
 - The worker's error envelope is `{ error: 'code', message, ...details }` — a

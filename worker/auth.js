@@ -15,7 +15,7 @@ export async function authenticate(request, env) {
   const hash = await sha256(match[1]);
 
   const device = await env.DB.prepare(`
-    SELECT d.id AS device_id, d.member_id, d.tenant, d.label,
+    SELECT d.id AS device_id, d.member_id, d.tenant, d.label, d.last_seen,
            m.name, m.role, m.revoked_at AS member_revoked, d.revoked_at AS device_revoked
       FROM devices d
       JOIN members m ON m.id = d.member_id AND m.tenant = d.tenant
@@ -24,6 +24,15 @@ export async function authenticate(request, env) {
 
   if (device) {
     if (device.device_revoked || device.member_revoked) return null;
+    // "Last seen" is the only way to tell a live token from one that has been
+    // sitting in a drawer. Throttled, because it is a write on a read path.
+    const seen = Date.parse(device.last_seen || '') || 0;
+    if (Date.now() - seen > 60_000) {
+      try {
+        await env.DB.prepare('UPDATE devices SET last_seen = ?1 WHERE tenant = ?2 AND id = ?3')
+          .bind(nowIso(), device.tenant, device.device_id).run();
+      } catch { /* never fail a request over a timestamp */ }
+    }
     return {
       kind: 'device',
       tenant: device.tenant,
@@ -54,13 +63,6 @@ export async function authenticate(request, env) {
   }
 
   return null;
-}
-
-/** Touch the device row so the members list can show "last seen". */
-export async function touchDevice(env, auth) {
-  if (auth.kind !== 'device') return;
-  await env.DB.prepare('UPDATE devices SET last_seen = ?1 WHERE tenant = ?2 AND id = ?3')
-    .bind(nowIso(), auth.tenant, auth.deviceId).run();
 }
 
 /** Which teams may this identity write to? Owner: everything. */

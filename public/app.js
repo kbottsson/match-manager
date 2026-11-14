@@ -318,9 +318,9 @@ function joinToken() {
   return raw || null;
 }
 
-async function redeemJoin(form) {
+async function redeemJoin(form, explicitName = null) {
   const token = s.join?.token;
-  const name = String(form.get('name') || '').trim();
+  const name = String(explicitName ?? form?.get('name') ?? '').trim();
   if (!token || !name) return;
   s.join = { ...s.join, busy: true, error: null };
   render();
@@ -365,7 +365,7 @@ async function resolveJoinToken() {
   if (!j?.token || j.kind) return;
   try {
     const res = await api.me(j.token);
-    s.join = { ...j, kind: 'device', me: res.data };
+    s.join = { ...j, kind: 'token', me: res.data };
     render();
     return;
   } catch (err) {
@@ -449,7 +449,7 @@ function viewJoin() {
     ? `<div class="robanner"><span class="dot"></span>${esc(T('inviteBad'))} · ${esc(j.previewError)}</div>` : '';
 
   // A token that is already a credential: nothing to redeem, only to accept.
-  if (j.kind === 'device') {
+  if (j.kind === 'token') {
     const me = j.me || {};
     return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div>
         <div style="font-size:17px;font-weight:700;margin-top:4px">${T('deviceTokenTitle')}</div>
@@ -469,6 +469,22 @@ function viewJoin() {
   if (j.previewError) {
     return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div></header>
       <div class="view">${dead}</div>`;
+  }
+
+  // A device link signs this phone in as someone who is already a member.
+  if (pv?.kind === 'device') {
+    return `<header><div class="toprow"><span class="chip">${T('joinClub')}</span></div>
+        <div style="font-size:17px;font-weight:700;margin-top:4px">${T('deviceLinkTitle')}</div>
+      </header>
+      <div class="view">
+        ${err}${previewBlock}
+        <div class="card">
+          <p class="muted" style="margin:0 0 12px">${esc(T('deviceLinkExplain', { name: pv.member || '', club: pv.club }))}</p>
+          <button class="btn primary wide" data-act="adddevicelink" ${j.busy ? 'disabled' : ''}>
+            ${j.busy ? '…' : T('deviceLinkUse')}
+          </button>
+        </div>
+      </div>`;
   }
 
   return `<header>
@@ -501,7 +517,7 @@ function syncChip() {
  * The club screen — who else is here, and the way out
  * ------------------------------------------------------------------ */
 
-const s_club = { members: null, invites: [], busy: false, invite: null, error: null };
+const s_club = { members: null, invites: [], busy: false, invite: null, deviceLink: null, error: null };
 
 async function loadMembers() {
   if (!paired()) return;
@@ -526,6 +542,20 @@ async function makeInvite() {
   try {
     const res = await api.invite('coach');
     s_club.invite = res.data;
+  } catch (err) {
+    s_club.error = err.code || 'network';
+  } finally {
+    s_club.busy = false;
+    render();
+  }
+}
+
+async function makeDeviceLink() {
+  if (!paired()) return;
+  s_club.busy = true;
+  try {
+    const res = await api.deviceLink(deviceLabel());
+    s_club.deviceLink = res.data;
   } catch (err) {
     s_club.error = err.code || 'network';
   } finally {
@@ -617,7 +647,7 @@ function viewClub() {
       ${!canInvite() ? '' : invite ? `<div class="card">
         <h3>${T('inviteReady')}</h3>
         <p class="muted" style="margin-bottom:8px">${T('inviteHint')}</p>
-        <input readonly value="${esc(invite.url)}" onclick="this.select()" style="font-size:12px">
+        <input readonly data-invite-link value="${esc(invite.url)}" onclick="this.select()" style="font-size:12px">
         <div style="display:flex;gap:8px;margin-top:10px">
           <button class="btn wide" data-act="copylink">${T('copyLink')}</button>
           <button class="btn wide" data-act="revokeinvite:${invite.id}">${T('revokeLink')}</button>
@@ -628,6 +658,19 @@ function viewClub() {
         </button>
         <p class="muted" style="margin-top:8px">${T('inviteExplain')}</p>
       </div>`}
+
+      <div class="card">
+        <h3>${T('addDevice')}</h3>
+        ${s_club.deviceLink ? `
+          <p class="muted" style="margin-bottom:8px">${T('deviceLinkHint')}</p>
+          <input readonly data-device-link value="${esc(s_club.deviceLink.url)}" onclick="this.select()" style="font-size:12px">
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn wide" data-act="copydevicelink">${T('copyLink')}</button>
+            <button class="btn wide" data-act="revokeinvite:${s_club.deviceLink.id}">${T('revokeLink')}</button>
+          </div>` : `
+          <p class="muted">${T('addDeviceExplain')}</p>
+          <button class="btn wide" data-act="newdevicelink" style="margin-top:10px">${T('addDevice')}</button>`}
+      </div>
 
       ${(s_club.invites || []).length ? `<div class="card">
         <h3>${T('pendingInvites')}</h3>
@@ -2186,8 +2229,18 @@ function handle(ev) {
     }
     case 'dojoin': if (form) redeemJoin(new FormData(form)); return;
     case 'usedevicetoken': pairWithDeviceToken(); return;
+    case 'adddevicelink': redeemJoin(null, s.join?.preview?.member || s.join?.preview?.club || 'Device'); return;
     case 'club': s.route = 'club'; s.sheet = null; loadMembers(); render(); return;
     case 'newinvite': makeInvite(); return;
+    case 'newdevicelink': makeDeviceLink(); return;
+    case 'copydevicelink': {
+      const url = s_club.deviceLink?.url;
+      if (!url) return;
+      (navigator.clipboard?.writeText(url) || Promise.reject())
+        .then(() => showToast('✓ ' + T('copied'), null))
+        .catch(() => showToast(T('copyManually'), null));
+      return;
+    }
     case 'refreshmembers': loadMembers(); return;
     case 'revokeinvite': revokeInviteLink(a); return;
     case 'revokemember': revokeMember(a); return;

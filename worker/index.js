@@ -105,7 +105,7 @@ async function redeem(request, env) {
   if (!raw || !name) return fail(400, 'invalid_input', 'invite and name are required.');
 
   const invite = await env.DB.prepare(`
-    SELECT id, tenant, role, team_id, expires_at, max_uses, uses, revoked_at
+    SELECT id, tenant, role, team_id, expires_at, max_uses, uses, revoked_at, kind, member_id
       FROM invites WHERE token_hash = ?1
   `).bind(await sha256(raw)).first();
 
@@ -116,6 +116,31 @@ async function redeem(request, env) {
 
   const tenant = await env.DB.prepare('SELECT id, name FROM tenants WHERE id = ?1').bind(invite.tenant).first();
   if (!tenant) return fail(410, 'tenant_missing', 'That club no longer exists.');
+
+  // A device link adds a phone to a member who already exists. An invite link
+  // creates a new member. Same table, different kinds of secret.
+  if (invite.kind === 'device') {
+    const owner = await env.DB.prepare('SELECT id, name, role, revoked_at FROM members WHERE tenant = ?1 AND id = ?2')
+      .bind(tenant.id, invite.member_id).first();
+    if (!owner || owner.revoked_at) return fail(410, 'member_gone', 'That person is no longer in the club.');
+
+    const token = newToken();
+    const deviceId = crypto.randomUUID();
+    const at = nowIso();
+    await env.DB.batch([
+      env.DB.prepare('INSERT INTO devices (tenant, id, member_id, token_hash, label, created_at, last_seen) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)')
+        .bind(tenant.id, deviceId, owner.id, await sha256(token), deviceLabel || `${owner.name}'s phone`, at),
+      env.DB.prepare('UPDATE invites SET uses = uses + 1 WHERE tenant = ?1 AND id = ?2').bind(tenant.id, invite.id),
+    ]);
+
+    return json({
+      token,
+      deviceId,
+      tenant,
+      member: { id: owner.id, name: owner.name, role: owner.role },
+      teamId: null,
+    }, 201);
+  }
 
   const memberId = crypto.randomUUID();
   const deviceId = crypto.randomUUID();
@@ -236,7 +261,7 @@ async function previewInvite(request, env, rawToken) {
   if (!rawToken) return fail(400, 'invalid_input', 'An invite token is required.');
 
   const invite = await env.DB.prepare(`
-    SELECT id, tenant, role, team_id, expires_at, max_uses, uses, revoked_at
+    SELECT id, tenant, role, team_id, expires_at, max_uses, uses, revoked_at, kind, member_id
       FROM invites WHERE token_hash = ?1
   `).bind(await sha256(rawToken)).first();
 
@@ -255,12 +280,49 @@ async function previewInvite(request, env, rawToken) {
     try { clubPlayers = (JSON.parse(model.body).people || []).length; } catch { clubPlayers = 0; }
   }
 
-  return json({
+  const out = {
     club: tenant.name,
     role: invite.role,
     teamId: invite.team_id || null,
     clubPlayers,
-  });
+    kind: invite.kind || 'member',
+  };
+  if (invite.kind === 'device' && invite.member_id) {
+    const m = await env.DB.prepare('SELECT name FROM members WHERE tenant = ?1 AND id = ?2')
+      .bind(invite.tenant, invite.member_id).first();
+    out.member = m?.name || null;
+  }
+  return json(out);
+}
+
+/**
+ * A link that adds another phone to *this* member.
+ *
+ * The owner token can only be handed over once and lives in one place; a coach
+ * moving from a laptop to a phone needs their own second device, not a second
+ * membership. Short-lived and single-use, because it is a credential.
+ */
+async function createDeviceLink(request, env, auth) {
+  if (auth.kind !== 'device') return fail(403, 'forbidden', 'Only a device can add another device.');
+
+  const data = await request.json().catch(() => ({}));
+  const label = clip(String(data.label || '').trim(), 60) || 'Another device';
+  const token = newToken();
+  const id = crypto.randomUUID();
+  const expiresAt = addHours(1);
+
+  await env.DB.prepare(`
+    INSERT INTO invites (tenant, id, token_hash, role, team_id, created_by, created_at, expires_at, max_uses, uses, kind, member_id)
+    VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7, 1, 0, 'device', ?8)
+  `).bind(auth.tenant, id, await sha256(token), auth.role, auth.memberId, nowIso(), expiresAt, auth.memberId).run();
+
+  return json({
+    id,
+    expiresAt,
+    url: `${env.APP_URL || 'https://kbottsson.com'}/join#${token}`,
+    token,
+    label,
+  }, 201);
 }
 
 async function revokeMember(request, env, auth, memberId) {
@@ -585,6 +647,7 @@ async function handle(request, env) {
   if (path === '/api/me') return me(request, env, auth);
   if (path === '/api/members' && request.method === 'GET') return listMembers(request, env, auth);
   if (path === '/api/members/invite' && request.method === 'POST') return createInvite(request, env, auth);
+  if (path === '/api/devices/link' && request.method === 'POST') return createDeviceLink(request, env, auth);
   if (path === '/api/view-links' && request.method === 'POST') return createViewLink(request, env, auth);
   if (path === '/api/events' && request.method === 'POST') return postEvents(request, env, auth);
   if (path === '/api/sync' && request.method === 'GET') return sync(request, env, auth);

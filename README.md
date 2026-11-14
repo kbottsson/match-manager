@@ -21,6 +21,11 @@ The app is open to anyone; the boundary is **storage**, not entry (D13).
   write endpoint. Says so on screen. Nothing is backed up.
 - **Paired** — the device carries a token from an invite link (`/join#…`). The
   first pairing *adopts* the season already on the phone and pushes it up.
+- **Two kinds of link.** An *invite* (`Club → Invite a coach`) adds a new member.
+  A *device link* (`Club → Add another device`) attaches another phone to the
+  person who is already signed in — same name, same rights, its own session, and
+  no second membership. Both are one-time and revocable; the owner token can be
+  used once as a device token via `/join#<token>`.
 - **One recorder per match** — the server holds a 60-second lease. Whoever holds
   it writes; everyone else is `○ VIEW` and sees who is recording, with an
   explicit **Take over**.

@@ -130,7 +130,7 @@ try {
   /* ---- invite a coach from inside the app ---- */
   await A.click('[data-act="newinvite"]');
   const link = await A.waitFor(
-    () => A.js("document.querySelector('.card input[readonly]')?.value || null"),
+    () => A.js("document.querySelector('[data-invite-link]')?.value || null"),
     'the invite link appears');
   ok('inviting a coach produces a link in the app', /\/join#/.test(link));
 
@@ -165,6 +165,42 @@ try {
   await B.click('[data-act="home"]');
   ok('…and can leave the club screen', (await B.js("!document.querySelector('[data-act=\"refreshmembers\"]')")) === true);
 
+  /* ---- adding another device to yourself ---- */
+  D2: {
+    const before = await api('GET', '/api/members', { token: owner });
+    const membersBefore = (before.body?.members || []).filter((m) => !m.revokedAt).length;
+    await A.click('[data-act="newdevicelink"]');
+    const deviceLink = await A.waitFor(
+      () => A.js("document.querySelector('[data-device-link]')?.value || null"), 'a device link appears');
+    ok('a member can mint a link for their own second device', /\/join#/.test(deviceLink));
+
+    const E = new Phone(9415, 'e');
+    try {
+      await E.launch();
+      await E.goto(deviceLink);
+      const screen = await E.waitFor(async () => {
+        const t = await E.text();
+        if (process.env.DEBUG) console.log('    [dbg] E text:', t.replace(/\s+/g, ' ').slice(0, 160));
+        return /add this phone|addera den här telefonen|lägg till den här|device-link/i.test(t) ? t : null;
+      }, 'the device-link screen');
+      ok('the second device is told whose phone it becomes', /Derek/.test(screen));
+      ok('…and is not asked for a name', (await E.js("!document.querySelector('input[name=name]')")) === true);
+
+      await E.click('[data-act="adddevicelink"]');
+      await E.waitFor(() => E.js("!!localStorage.getItem('mm.sync.pairing')"), 'the second device pairs');
+      const pairing2 = await E.js("JSON.parse(localStorage.getItem('mm.sync.pairing'))");
+      ok('it signs in as the same person', pairing2?.member?.role === 'team_admin', 'role ' + pairing2?.member?.role);
+
+      const members = await api('GET', '/api/members', { token: owner });
+      const live = (members.body?.members || []).filter((m) => !m.revokedAt);
+      ok('…without creating a new membership', live.length === membersBefore,
+        `${live.length} members, was ${membersBefore}`);
+      const admin = live.find((m) => m.role === 'team_admin');
+      ok('…and it is a second device on the same person', (admin?.devices || []).length === 2,
+        `${(admin?.devices || []).length} devices`);
+    } finally { E.close(); }
+  }
+
   /* ---- the admin sees them arrive ---- */
   if (!(await A.js("!!document.querySelector('[data-act=\"refreshmembers\"]')"))) {
     await A.click('[data-act="club"]');
@@ -180,9 +216,9 @@ try {
   /* ---- revoking a link that was sent to the wrong person ---- */
   await A.click('[data-act="newinvite"]');
   const second = await A.waitFor(
-    () => A.js("document.querySelector('.card input[readonly]')?.value || null"), 'a second link');
+    () => A.js("document.querySelector('[data-invite-link]')?.value || null"), 'a second link');
   await A.click('[data-act^="revokeinvite:"]');
-  await A.waitFor(() => A.js("!document.querySelector('.card input[readonly]')"), 'the link is withdrawn');
+  await A.waitFor(() => A.js("!document.querySelector('[data-invite-link]')"), 'the link is withdrawn');
   const dead = await api('GET', `/api/invites/${second.split('#')[1]}/preview`);
   ok('a revoked link stops working immediately', dead.status === 410, 'status ' + dead.status);
 
