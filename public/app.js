@@ -593,6 +593,12 @@ async function revokeInviteLink(id) {
   render();
 }
 
+async function retireDevice(id) {
+  if (!confirm(T('retireConfirm'))) return;
+  try { await api.retireDevice(id); await loadMembers(); }
+  catch (err) { s_club.error = err.code || 'network'; render(); }
+}
+
 async function revokeMember(id) {
   try { await api.revokeMember(id); await loadMembers(); } catch { render(); }
 }
@@ -682,6 +688,25 @@ function viewClub() {
         </button>
         <p class="muted" style="margin-top:8px">${T('inviteExplain')}</p>
       </div>`}
+
+      <div class="card">
+        <h3>${T('devices')}</h3>
+        ${(() => {
+          const all = [];
+          for (const m of members || []) {
+            for (const d of (m.devices || [])) all.push({ ...d, who: m.name });
+          }
+          if (!all.length) return `<p class="muted">${T('noDevices')}</p>`;
+          return all.map((d) => `<div class="row plain">
+            <span class="slot">●</span>
+            <span class="nm as-text">${esc(d.label)}<span class="no">${esc(d.who)}</span></span>
+            <span class="min" style="width:auto;font-size:10.5px;color:var(--ink3)">${esc(String(d.lastSeen || '').slice(0, 10))}</span>
+            ${d.id === pairing?.deviceId
+              ? `<span class="chip">${T('thisOne')}</span>`
+              : `<button class="rbtn wide" data-act="retiredevice:${d.id}">${T('retire')}</button>`}
+          </div>`).join('');
+        })()}
+      </div>
 
       <div class="card">
         <h3>${T('addDevice')}</h3>
@@ -2261,6 +2286,7 @@ function handle(ev) {
     case 'club': s.route = 'club'; s.sheet = null; loadMembers(); render(); return;
     case 'newinvite': makeInvite(); return;
     case 'newdevicelink': makeDeviceLink(); return;
+    case 'retiredevice': retireDevice(a); return;
     case 'copydevicelink': {
       const url = s_club.deviceLink?.url;
       if (!url) return;

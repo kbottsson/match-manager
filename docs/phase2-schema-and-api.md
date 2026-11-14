@@ -12,6 +12,9 @@ Settled during the build, where this document had only intent:
 - A coach invited **without** a team is club-wide, not powerless. Team scoping
   narrows a coach's reach; it does not gate it. Otherwise a coach invited before
   the teams exist can write nothing.
+- `DELETE /api/devices/:id` — retires a device (sets `revoked_at`; the row stays
+  as evidence, the token stops authenticating). Refuses to retire the device
+  making the request.
 - `POST /api/devices/link` — a one-hour, single-use link that adds **a device**
   to the member who asked, rather than a new member. Invites and device links
   share the `invites` table, distinguished by `kind` (`member` | `device`) and

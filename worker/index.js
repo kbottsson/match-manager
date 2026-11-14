@@ -186,7 +186,7 @@ async function listMembers(request, env, auth) {
     SELECT m.id, m.name, m.role, m.created_at, m.revoked_at,
            (SELECT group_concat(team_id) FROM member_teams t
               WHERE t.tenant = m.tenant AND t.member_id = m.id) AS teams,
-           (SELECT group_concat(label || '@' || COALESCE(last_seen, 'never'), '|')
+           (SELECT group_concat(d.id || '~' || label || '@' || COALESCE(last_seen, 'never'), '|')
               FROM devices d WHERE d.tenant = m.tenant AND d.member_id = m.id AND d.revoked_at IS NULL) AS devices
       FROM members m WHERE m.tenant = ?1 ORDER BY m.created_at
   `).bind(auth.tenant).all();
@@ -206,8 +206,9 @@ async function listMembers(request, env, auth) {
       revokedAt: r.revoked_at,
       teams: r.teams ? r.teams.split(',') : [],
       devices: r.devices ? r.devices.split('|').map((d) => {
-        const [label, lastSeen] = d.split('@');
-        return { label, lastSeen };
+        const [idAndLabel, lastSeen] = d.split('@');
+        const cut = idAndLabel.indexOf('~');
+        return { id: idAndLabel.slice(0, cut), label: idAndLabel.slice(cut + 1), lastSeen };
       }) : [],
     })),
     invites: invites.results || [],
@@ -398,6 +399,38 @@ async function revokeInvite(request, env, auth, inviteId) {
   await env.DB.prepare('UPDATE invites SET revoked_at = ?1 WHERE tenant = ?2 AND id = ?3')
     .bind(nowIso(), auth.tenant, inviteId).run();
   return json({ id: inviteId, revoked: true });
+}
+
+/**
+ * Retire a device.
+ *
+ * Revoked, not deleted: the row is what proves a phone once had access, and a
+ * deleted row proves nothing. A revoked device fails authentication because
+ * `authenticate` refuses revoked rows, so this is a real revocation — the
+ * cleanup path and the "I lost my phone" path are the same operation.
+ */
+async function revokeDevice(request, env, auth, deviceId) {
+  if (auth.kind !== 'device') return fail(403, 'forbidden', 'Only a signed-in device can manage devices.');
+  if (RANK[auth.role] < RANK.team_admin) return fail(403, 'forbidden', 'Only admins can retire a device.');
+
+  // Retiring the device you are using would lock you out mid-request.
+  if (deviceId === auth.deviceId) return fail(409, 'self_revoke', 'That is the device you are using.');
+
+  const row = await env.DB.prepare('SELECT id, member_id, label, revoked_at FROM devices WHERE tenant = ?1 AND id = ?2')
+    .bind(auth.tenant, deviceId).first();
+  if (!row) return fail(404, 'not_found', 'No such device.');
+  if (row.revoked_at) return json({ id: deviceId, revoked: true, already: true });
+
+  if (auth.role === 'team_admin') {
+    const shared = await env.DB.prepare(
+      'SELECT 1 AS ok FROM member_teams WHERE tenant = ?1 AND member_id = ?2',
+    ).bind(auth.tenant, row.member_id).first();
+    if (!shared) return fail(403, 'forbidden', 'Not yours to retire.');
+  }
+
+  await env.DB.prepare('UPDATE devices SET revoked_at = ?1 WHERE tenant = ?2 AND id = ?3')
+    .bind(nowIso(), auth.tenant, deviceId).run();
+  return json({ id: deviceId, label: row.label, revoked: true });
 }
 
 async function revokeViewLink(request, env, auth, id) {
@@ -648,6 +681,9 @@ async function handle(request, env) {
   if (path === '/api/members' && request.method === 'GET') return listMembers(request, env, auth);
   if (path === '/api/members/invite' && request.method === 'POST') return createInvite(request, env, auth);
   if (path === '/api/devices/link' && request.method === 'POST') return createDeviceLink(request, env, auth);
+
+  m = /^\/api\/devices\/([\w-]+)$/.exec(path);
+  if (m && request.method === 'DELETE') return revokeDevice(request, env, auth, m[1]);
   if (path === '/api/view-links' && request.method === 'POST') return createViewLink(request, env, auth);
   if (path === '/api/events' && request.method === 'POST') return postEvents(request, env, auth);
   if (path === '/api/sync' && request.method === 'GET') return sync(request, env, auth);

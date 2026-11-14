@@ -195,6 +195,25 @@ async function main() {
   eq('a revoked invite cannot be redeemed', usedAfterRevoke.status, 410);
   eq('…and no longer previews either', (await req('GET', `/api/invites/${revocable.body.token}/preview`)).status, 410);
 
+  // A device can be retired through the API — the same operation as "I lost my
+  // phone", and the one cleanup should use instead of deleting rows by hand.
+  {
+    const link = await req('POST', '/api/devices/link', { token: owner, body: { label: 'test:retire' } });
+    eq('a device link can be minted', link.status, 201);
+    const paired = await req('POST', '/api/auth/redeem', { body: { invite: link.body.token, name: 'test-retire', device: 'test:retire' } });
+    eq('…and redeemed into a device', paired.status, 201);
+    const doomedId = paired.body.deviceId;
+    const token2 = paired.body.token;
+
+    eq('the new device works', (await req('GET', '/api/me', { token: token2 })).status, 200);
+    const selfRetire = await req('DELETE', `/api/devices/${doomedId}`, { token: token2 });
+    eq('a device cannot retire itself mid-session', selfRetire.status, 409);
+    const retired = await req('DELETE', `/api/devices/${doomedId}`, { token: owner });
+    eq('an admin can retire it', retired.status, 200);
+    eq('…and its token stops working at once', (await req('GET', '/api/me', { token: token2 })).status, 401);
+    eq('retiring twice is not an error', (await req('DELETE', `/api/devices/${doomedId}`, { token: owner })).status, 200);
+  }
+
   const coachInvite = await req('POST', '/api/members/invite', { token: owner, body: { role: 'coach', teamId: 't2' } });
   const coachRedeem = await req('POST', '/api/auth/redeem', { body: { invite: coachInvite.body.token, name: 'Sam' } });
   const sam = coachRedeem.body.token;

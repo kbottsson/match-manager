@@ -160,6 +160,8 @@ export function createApi({
 
     deviceLink: (label) => call('POST', '/api/devices/link', { body: { label } }),
 
+    retireDevice: (id) => call('DELETE', `/api/devices/${id}`),
+
     revokeInvite: (id) => call('DELETE', `/api/invites/${id}`),
 
     revokeMember: (id) => call('DELETE', `/api/members/${id}`),
