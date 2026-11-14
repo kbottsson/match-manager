@@ -125,6 +125,7 @@ export default {
   removedCount: '{n} removed',
   noCoaches: 'Nobody else yet. You are the first.',
   thisDevice: 'This device',
+  build: 'Build',
   pairedAs: 'Signed in as {name}.',
   unpair: 'Unpair this device',
   unpairConfirm: 'Unpair this device? The matches already here stay on the phone, but they stop syncing and nobody else can see them.',

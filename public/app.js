@@ -19,6 +19,13 @@ import {
 
 const store = createStore();
 
+/**
+ * Build stamp, kept in step with the service worker's VERSION by a test.
+ * A cached shell is invisible otherwise, and "did my phone update?" becomes
+ * unanswerable — which is exactly the question that wastes an afternoon.
+ */
+const BUILD = 'mm-v13';
+
 /* ---- sync (phase 2). Completely inert without a pairing token: D13. ---- */
 
 const outbox = createOutbox();
@@ -739,6 +746,7 @@ function viewClub() {
 
       <div class="card">
         <h3>${T('thisDevice')}</h3>
+        <p class="muted" data-build>${T('build')} ${BUILD}</p>
         <p class="muted">${T('pairedAs', { name: pairing?.member?.name || '—' })}</p>
         <button class="btn wide" data-act="unpair" style="margin-top:10px">${T('unpair')}</button>
       </div>

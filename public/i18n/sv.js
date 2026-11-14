@@ -115,6 +115,7 @@ export default {
   removedCount: '{n} borttagna',
   noCoaches: 'Ingen annan ännu. Du är först.',
   thisDevice: 'Den här enheten',
+  build: 'Version',
   pairedAs: 'Inloggad som {name}.',
   unpair: 'Koppla bort enheten',
   unpairConfirm: 'Koppla bort enheten? Matcherna som redan finns ligger kvar på telefonen, men de synkas inte längre och ingen annan ser dem.',
