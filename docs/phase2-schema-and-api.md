@@ -1,3 +1,21 @@
+## Deleting is a tombstone, never a row removal
+
+A match lives as a document in the club, so deleting it locally removes the copy
+and the next pull puts it back — a deletion that silently undoes itself, which is
+exactly what a coach reported. A match delete therefore writes `deletedAt` into
+the document and pushes it; `listMatches()` filters tombstones, so every device
+agrees and the record of the deletion survives.
+
+Consequences worth knowing:
+
+- The plan document and events of a deleted match stay on the server. They are
+  unreachable (the match is filtered) and small; purging them is a separate,
+  deliberate operation.
+- A live match cannot be deleted: the clock, the lease and any viewer would be
+  stranded. It must be ended first.
+- Rules that are local-only deletions are the same bug: anything the club holds a
+  copy of must be told, or it comes back.
+
 ## Status
 
 **Implemented and tested.** Server: `worker/`. Client: `public/sync.js`,
