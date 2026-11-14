@@ -28,6 +28,13 @@ export const KEYS = {
 export const LEASE_STALE_MS = 60_000;
 /** Poll cadence while a match is live and the screen is visible. */
 export const POLL_MS = 5_000;
+/**
+ * ...and when nothing is live. A paired device still has to converge on the
+ * club: a roster edited on the coach's laptop, a match created for Saturday.
+ * Without this, a phone that joins outside a match never learns anything and
+ * looks broken, which is exactly what it is.
+ */
+export const POLL_IDLE_MS = 30_000;
 /** Failure backoff, capped. */
 export const BACKOFF_MS = [5_000, 10_000, 20_000, 30_000];
 /** Eviction order: documents before events, because an event needs its match. */
@@ -267,9 +274,11 @@ export function createOutbox(storage = globalThis.localStorage, key = KEYS.outbo
  * the recorder is the one driving (it doesn't poll) or the screen is hidden.
  */
 export function nextPollDelay({ failures = 0, live = true, hidden = false } = {}) {
-  if (!live || hidden) return null;
-  if (failures <= 0) return POLL_MS;
-  return BACKOFF_MS[Math.min(failures - 1, BACKOFF_MS.length - 1)];
+  if (hidden) return null;
+  const base = live ? POLL_MS : POLL_IDLE_MS;
+  if (failures <= 0) return base;
+  if (live) return BACKOFF_MS[Math.min(failures - 1, BACKOFF_MS.length - 1)];
+  return Math.min(base * 2 ** (failures - 1), 300_000);
 }
 
 /**
@@ -312,6 +321,7 @@ export function createController({
     member: null,
     tenant: null,
     matchId: null,
+    mode: null,             // 'live' while a match is being recorded, 'idle' otherwise
     role: 'coach',          // 'coach' can record; 'view' is read-only by token
     lease: null,
     lastSyncAt: null,
@@ -452,7 +462,7 @@ export function createController({
         state.lastError = err.code || 'network';
         emit();
       }
-      schedule(nextPollDelay({ failures: state.failures, live: true, hidden: false }));
+      schedule(nextPollDelay({ failures: state.failures, live: state.mode === 'live', hidden: false }));
     }, ms);
   }
 
@@ -479,15 +489,26 @@ export function createController({
     /** Begin pushing and polling for a match. */
     async start(matchId) {
       state.matchId = matchId;
+      state.mode = 'live';
       state.running = true;
       emit();
       await flush();
       schedule(nextPollDelay({ failures: 0, live: true, hidden: false }));
     },
 
+    /** Keep the club fresh when nothing is being recorded: every 30 s. */
+    startIdle() {
+      state.mode = 'idle';
+      state.matchId = null;
+      state.running = true;
+      emit();
+      schedule(nextPollDelay({ failures: 0, live: false, hidden: false }));
+    },
+
     stop() {
       state.running = false;
       state.matchId = null;
+      state.mode = null;
       if (tick) { clearTimer(tick); tick = null; }
       if (beat) { clearTimer(beat); beat = null; }
       emit();
@@ -566,7 +587,7 @@ export function createController({
     setHidden(hidden) {
       if (!state.running) return;
       if (hidden) { if (tick) { clearTimer(tick); tick = null; } }
-      else schedule(nextPollDelay({ failures: state.failures, live: true, hidden: false }));
+      else schedule(nextPollDelay({ failures: state.failures, live: state.mode === 'live', hidden: false }));
     },
   };
 }

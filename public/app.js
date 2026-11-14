@@ -234,25 +234,33 @@ async function maybeClaim(force = false) {
  */
 async function syncLifecycle() {
   if (!paired()) return;
-  // Still pairing: the join screen must not start a match session underneath
-  // itself, or the first claim runs before the match document exists.
+  // Still pairing: the join screen must not start a session underneath itself.
   if (s.join) return;
 
   const live = s.match?.status === 'live';
+  const st = sync.state();
+
   if (!live) {
-    if (sync.state().running) { sync.stopHeartbeat(); await sync.release(); sync.stop(); }
+    // Nothing being recorded — but a paired phone still has to converge on the
+    // club, or a roster edited on another device never arrives.
+    if (!(st.running && st.mode === 'idle')) {
+      if (st.running) { sync.stopHeartbeat(); await sync.release(); sync.stop(); }
+      sync.startIdle();
+    }
     return;
   }
 
-  const st = sync.state();
-  if (!(st.running && st.matchId === s.match.id)) {
-    if (syncStarting) return;
-    syncStarting = true;
-    try {
-      await sync.start(s.match.id);
-    } catch { /* offline start is fine; the claim retries */ }
-    finally { syncStarting = false; }
+  if (st.running && st.mode === 'live' && st.matchId === s.match.id) {
+    await maybeClaim();
+    return;
   }
+
+  if (syncStarting) return;
+  syncStarting = true;
+  try {
+    await sync.start(s.match.id);
+  } catch { /* offline start is fine; the claim retries */ }
+  finally { syncStarting = false; }
   await maybeClaim();
 }
 

@@ -108,18 +108,9 @@ try {
   await A.waitFor(() => A.js("!!localStorage.getItem('mm.sync.pairing')"), 'A pairs');
   ok('the admin device is paired', true);
 
-  if (process.env.DEBUG) {
-    console.log('    [dbg] A text :', (await A.text()).replace(/\s+/g, ' ').slice(0, 220));
-    console.log('    [dbg] chips  :', await A.js("Array.from(document.querySelectorAll('.chip')).map(c => c.dataset.act + '/' + c.innerText).join(' | ')"));
-    console.log('    [dbg] route  :', await A.js('__mm.state.route'));
-  }
   await A.js("window.__errs = []; addEventListener('error', e => window.__errs.push(String(e.message))); true");
   await A.click('[data-act="club"]');
   await sleep(600);
-  if (process.env.DEBUG) {
-    console.log('    [dbg] html   :', (await A.js("document.getElementById('app').innerHTML")).slice(0, 140).replace(/\s+/g, ' '));
-    console.log('    [dbg] errs   :', JSON.stringify(await A.js('window.__errs')));
-  }
   const clubScreen = await A.waitFor(async () => {
     const t = await A.text();
     return /tränare|coaches/i.test(t) ? t : null;
@@ -180,7 +171,6 @@ try {
       await E.goto(deviceLink);
       const screen = await E.waitFor(async () => {
         const t = await E.text();
-        if (process.env.DEBUG) console.log('    [dbg] E text:', t.replace(/\s+/g, ' ').slice(0, 160));
         return /add this phone|addera den här telefonen|lägg till den här|device-link/i.test(t) ? t : null;
       }, 'the device-link screen');
       ok('the second device is told whose phone it becomes', /Derek/.test(screen));
@@ -199,6 +189,23 @@ try {
       ok('…and it is a second device on the same person', (admin?.devices || []).length === 2,
         `${(admin?.devices || []).length} devices`);
     } finally { E.close(); }
+  }
+
+  /* ---- a phone that joined outside a match still converges ---- */
+  {
+    const mode = await B.js('__mm.sync.state().mode');
+    ok('a phone with no live match idles instead of stopping', mode === 'idle', 'mode ' + mode);
+    ok('…and is still running', (await B.js('__mm.sync.state().running')) === true);
+
+    // Something happens on another device after this phone joined.
+    await api('PUT', '/api/docs/match/m-late', {
+      token: owner,
+      body: { body: { id: 'm-late', opponent: 'Late Arrival FC', status: 'setup', teamId: 't1', seasonId: 's1' } },
+    });
+    const arrived = await B.waitFor(
+      () => B.js("JSON.parse(localStorage.getItem('mm.v1.matches')||'[]').some(m => m.id === 'm-late')"),
+      'the late match reaches the phone', 45000);
+    ok('a match created later reaches the idle phone on its own', !!arrived);
   }
 
   /* ---- the admin sees them arrive ---- */

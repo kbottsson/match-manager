@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  KEYS, LEASE_STALE_MS, POLL_MS, BACKOFF_MS,
+  KEYS, LEASE_STALE_MS, POLL_MS, POLL_IDLE_MS, BACKOFF_MS,
   loadPairing, savePairing, clearPairing,
   createApi, createOutbox, createController, nextPollDelay, leaseState, SyncError,
 } from '../public/sync.js';
@@ -186,9 +186,31 @@ test('poll: backs off 5 → 10 → 20 → 30 and stays at 30', () => {
   assert.deepEqual(seq, [...BACKOFF_MS, 30_000, 30_000]);
 });
 
-test('poll: never runs while hidden or when nothing is live', () => {
+test('poll: never runs while hidden', () => {
   assert.equal(nextPollDelay({ hidden: true }), null);
-  assert.equal(nextPollDelay({ live: false }), null);
+});
+
+test('poll: with nothing live it still converges, every 30 s', () => {
+  // A paired phone that joins outside a match must still learn the roster.
+  assert.equal(nextPollDelay({ live: false }), 30_000);
+  assert.equal(POLL_IDLE_MS, 30_000);
+});
+
+test('poll: idle backs off further than live, because nothing is urgent', () => {
+  // First failure keeps the base interval (same rule as the live path), then doubles.
+  assert.equal(nextPollDelay({ live: false, failures: 1 }), 30_000);
+  assert.equal(nextPollDelay({ live: false, failures: 2 }), 60_000);
+  assert.equal(nextPollDelay({ live: false, failures: 3 }), 120_000);
+  assert.equal(nextPollDelay({ live: false, failures: 9 }), 300_000, 'capped');
+});
+
+test('controller: idling keeps running without a match, and names its mode', () => {
+  const st = mem();
+  const c = ctrl(fakeApi(), createOutbox(st), st);
+  c.startIdle();
+  assert.equal(c.state().mode, 'idle');
+  assert.equal(c.state().running, true);
+  assert.equal(c.state().matchId, null);
 });
 
 /* ------------------------------------------------------------------ *
