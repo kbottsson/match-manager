@@ -197,6 +197,20 @@ try {
     ok('a phone with no live match idles instead of stopping', mode === 'idle', 'mode ' + mode);
     ok('…and is still running', (await B.js('__mm.sync.state().running')) === true);
 
+    // The club needs a team for a match to make sense to another phone.
+    await api('PUT', '/api/docs/model', {
+      token: owner,
+      body: { body: {
+        clubs: [{ id: 'c1', name: 'Uppåkra P16' }],
+        seasons: [{ id: 's1', clubId: 'c1', year: 2026, closed: false }],
+        people: [{ id: 'p1', name: 'Leo' }, { id: 'p2', name: 'Sam' }],
+        entries: [{ personId: 'p1', seasonId: 's1', no: '4', status: 'active' },
+                  { personId: 'p2', seasonId: 's1', no: '7', status: 'active' }],
+        teams: [{ id: 't1', seasonId: 's1', name: 'P16 A', personIds: ['p1', 'p2'] }],
+        clubId: 'c1', seasonId: 's1',
+      } },
+    });
+
     // Something happens on another device after this phone joined.
     await api('PUT', '/api/docs/match/m-late', {
       token: owner,
@@ -206,6 +220,17 @@ try {
       () => B.js("JSON.parse(localStorage.getItem('mm.v1.matches')||'[]').some(m => m.id === 'm-late')"),
       'the late match reaches the phone', 45000);
     ok('a match created later reaches the idle phone on its own', !!arrived);
+
+    // …and it can be opened, with its plan drawn, on the phone that never saw it before.
+    await B.js("document.querySelector('[data-act=\"tab:match\"]')?.click()");
+    await B.waitFor(() => B.js("!!document.querySelector('[data-act^=\"openmatch:\"]')"),
+      'the match appears in the list', 15000);
+    ok('the match is listed, not an orphan', true);
+    await B.click('[data-act^="openmatch:"]');
+    await B.waitFor(() => B.js("document.querySelectorAll('.ptable td').length > 0"),
+      'the plan screen draws', 15000);
+    ok('the shared plan renders on the other phone',
+      (await B.js("document.querySelectorAll('.ptable td').length")) > 0);
   }
 
   /* ---- the admin sees them arrive ---- */

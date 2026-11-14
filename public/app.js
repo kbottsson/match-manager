@@ -126,6 +126,20 @@ function pushDoc(kind, id, body) {
  * Documents win wholesale (a plan is a document); events merge by id so a
  * late arrival never overwrites anything this phone did.
  */
+let modelRepairDone = false;
+
+/**
+ * The club's model is authoritative — except when it is empty where we are not.
+ * That means a local edit never reached it (the match/plan exist, the team does
+ * not), and every other device sees an orphan. Say it once, forcefully.
+ */
+function repairModelOnce() {
+  if (modelRepairDone || !paired()) return;
+  modelRepairDone = true;
+  outbox.addDoc('model', '', modelBody(), null);   // null rev: no If-Match
+  flushSoon(0);
+}
+
 function applyRemote(got) {
   if (!got || !paired()) return;
   let changed = false;
@@ -147,8 +161,10 @@ function applyRemote(got) {
       s.seasons = doc.body.seasons?.length ? doc.body.seasons : s.seasons;
       s.people = doc.body.people?.length ? doc.body.people : s.people;
       s.entries = doc.body.entries?.length ? doc.body.entries : s.entries;
+      const hadTeams = s.teams.length;
       s.teams = doc.body.teams?.length ? doc.body.teams : s.teams;
       persistModelLocal();
+      if (!doc.body.teams?.length && hadTeams > 0) repairModelOnce();
       changed = true;
     }
   }
@@ -798,6 +814,10 @@ function saveMatch(match = s.match) {
   if (!match) return;
   store.saveMatch(match);
   pushDoc('match', match.id, matchBody(match));
+  // A match names a team. If the club's model has never heard of that team,
+  // the match arrives on the other phone as an orphan — so the roster model
+  // travels with it.
+  pushDoc('model', '', modelBody());
 }
 
 /**
