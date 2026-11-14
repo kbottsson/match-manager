@@ -1,3 +1,18 @@
+## A token identifies a device, not a person
+
+The lease is keyed on `deviceId`, and `mine` is decided by comparing it. Two
+phones sharing one token therefore both believe they hold the pen: both claims
+succeed, both record, and the match document flips between them while the event
+log accumulates two parallel histories.
+
+Never hand the same token to a second phone. `POST /api/devices/link` exists
+precisely so a person can be signed in on several devices *without* sharing an
+identity — each phone gets its own row, its own lease, and the read-only/recorder
+split keeps working.
+
+Owner tokens are the tempting exception (there is one, and it is convenient) and
+the most damaging one, because they carry the highest authority.
+
 ## Deleting is a tombstone, never a row removal
 
 A match lives as a document in the club, so deleting it locally removes the copy
