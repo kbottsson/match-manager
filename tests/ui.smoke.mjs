@@ -416,6 +416,49 @@ async function main() {
   ok('a live match is still resumable afterwards',
     await evaluate("!!document.querySelector('[data-act=\"resume\"]')"));
 
+  /* ---- a five-a-side match: the format is chosen, not assumed ---- */
+  console.log('five-a-side');
+  await click('[data-act="home"]');
+  await sleep(250);
+  await click('[data-act="tab:match"]');
+  await sleep(250);
+  await click('[data-act="newmatch"]');
+  await sleep(350);
+  ok('the match form offers both formats',
+    (await evaluate("Array.from(document.querySelectorAll('#matchform [name=format] option')).map(o => o.value).join(',')")) === '7,5');
+  await evaluate(`(() => { const f = document.querySelector('#matchform');
+    f.querySelector('[name=opponent]').value = 'Fem mot fem';
+    f.querySelector('[name=format]').value = '5';
+    f.querySelector('[name=periods]').value = '2';
+    f.querySelector('[name=minutes]').value = '12';
+    f.querySelector('[name=block]').value = '3';
+  })()`);
+  await click('[data-act="creatematch"]');
+  await sleep(500);
+  ok('the match remembers its five slots',
+    (await evaluate("JSON.stringify(JSON.parse(localStorage.getItem('mm.v1.matches')).slice(-1)[0].slots)"))
+      === '["G","LB","RB","LF","RF"]');
+  ok('the plan draws five rows, not seven',
+    (await evaluate("Array.from(document.querySelectorAll('.ptable td.lbl:not(.bench)')).slice(0,5).map(t => t.innerText).join(',')"))
+      === 'G,LB,RB,LF,RF');
+
+  await click('[data-act="autoplan"]');
+  await sleep(500);
+  const fiveFilled = await evaluate(`(() => {
+    const ms = JSON.parse(localStorage.getItem('mm.v1.matches'));
+    const cells = JSON.parse(localStorage.getItem('mm.v1.plan.' + ms[ms.length - 1].id) || '[]');
+    return cells.filter((c) => c.blockIndex === 0).length;
+  })()`);
+  ok('auto-fill fills all five slots', fiveFilled === 5, 'filled ' + fiveFilled);
+
+  await click('[data-act="startmatch"]');
+  await sleep(600);
+  ok('the live screen puts five on the field',
+    (await evaluate("Array.from(document.querySelectorAll('.view .list .row .slot')).slice(0,5).map(s => s.innerText).join(',')"))
+      === 'G,LB,RB,LF,RF');
+  ok('…and the rest on the bench',
+    (await evaluate("document.querySelectorAll('.view .list .row').length")) > 5);
+
   ws.close();
 }
 

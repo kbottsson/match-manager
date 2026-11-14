@@ -13,11 +13,27 @@ export const MIN = 60000;
 export const SLOTS = ['G', 'LB', 'RB', 'LM', 'MM', 'RM', 'F'];
 export const OUTFIELD_SLOTS = ['LB', 'RB', 'LM', 'MM', 'RM', 'F'];
 
+/**
+ * The shapes of game this app can run. A match carries its own slot list, so
+ * everything downstream — plan grid, live rows, substitutions, the minutes
+ * check — follows from the format rather than assuming seven.
+ */
+export const FORMATS = {
+  '7': { id: '7', players: 7, slots: ['G', 'LB', 'RB', 'LM', 'MM', 'RM', 'F'] },
+  '5': { id: '5', players: 5, slots: ['G', 'LB', 'RB', 'LF', 'RF'] },
+};
+
+/** The slot list for a config; seven-a-side when unspecified, for old data. */
+export function slotsFor(config = {}) {
+  return (config.slots && config.slots.length ? config.slots : SLOTS).slice();
+}
+
 /** Which line a slot belongs to. GK is its own line (D4 keeps it in the total). */
 export const LINE_OF = {
   G: 'G',
   LB: 'B', RB: 'B',
   LM: 'M', MM: 'M', RM: 'M',
+  LF: 'F', RF: 'F',
   F: 'F',
 };
 
@@ -70,6 +86,7 @@ function pad2(n) {
  */
 export function planForecast(cells = [], config = {}, roster = []) {
   const c = cfg(config);
+  const slots = slotsFor(c);
   const blocks = blockLayout(c);
   const errors = [];
   const known = new Set(roster.map((p) => p.id));
@@ -78,7 +95,7 @@ export function planForecast(cells = [], config = {}, roster = []) {
   for (const cell of cells) {
     if (!byBlock.has(cell.blockIndex)) byBlock.set(cell.blockIndex, {});
     const row = byBlock.get(cell.blockIndex);
-    if (!SLOTS.includes(cell.slot)) {
+    if (!slots.includes(cell.slot)) {
       errors.push({ kind: 'bad_slot', blockIndex: cell.blockIndex, slot: cell.slot });
       continue;
     }
@@ -90,12 +107,12 @@ export function planForecast(cells = [], config = {}, roster = []) {
 
   for (const block of blocks) {
     const row = byBlock.get(block.blockIndex) || {};
-    const missing = SLOTS.filter((s) => !row[s]);
+    const missing = slots.filter((s) => !row[s]);
     if (missing.length) {
       errors.push({ kind: 'empty_slots', blockIndex: block.blockIndex, missing });
     }
     const seen = new Set();
-    for (const slot of SLOTS) {
+    for (const slot of slots) {
       const pid = row[slot];
       if (!pid) continue;
       if (seen.has(pid)) {
@@ -116,7 +133,7 @@ export function planForecast(cells = [], config = {}, roster = []) {
 
   for (const block of blocks) {
     const row = byBlock.get(block.blockIndex) || {};
-    for (const slot of SLOTS) {
+    for (const slot of slots) {
       const pid = row[slot];
       if (!pid) continue;
       const p = ensure(pid);
@@ -127,7 +144,7 @@ export function planForecast(cells = [], config = {}, roster = []) {
   }
 
   const totalMs = Object.values(players).reduce((a, p) => a + p.minMs, 0);
-  const expectedMs = SLOTS.length * c.periodCount * c.periodMinutes * MIN;
+  const expectedMs = slots.length * c.periodCount * c.periodMinutes * MIN;
 
   // Spread is measured across the outfield rotation only: a full-match keeper
   // is structurally ahead and would distort it (D4 note in the spec).
@@ -187,6 +204,7 @@ export function stampEvents(existing = [], incoming = []) {
 export function project(events = [], config = {}, nowMs = Date.now()) {
   const c = cfg(config);
   const P = c.periodCount;
+  const slots = slotsFor(c);
 
   const voidedIds = new Set(
     events.map((e) => e.voidOf).filter(Boolean),
@@ -196,6 +214,7 @@ export function project(events = [], config = {}, nowMs = Date.now()) {
     .sort((a, b) => a.atMs - b.atMs || String(a.id).localeCompare(String(b.id)));
 
   const st = {
+    slots,
     period: 1,
     state: 'idle', // idle | running | paused | ended
     banked: new Array(P).fill(0),
@@ -250,7 +269,7 @@ export function project(events = [], config = {}, nowMs = Date.now()) {
   }
 
   function place(slot, pid) {
-    if (!SLOTS.includes(slot)) {
+    if (!slots.includes(slot)) {
       st.warnings.push({ kind: 'bad_slot', slot, playerId: pid });
       return;
     }
@@ -428,7 +447,7 @@ export function project(events = [], config = {}, nowMs = Date.now()) {
     warnInvariant:
       Math.abs(
         Object.values(st.players).reduce((a, p) => a + p.playMs, 0) -
-          SLOTS.length * totalRunMs,
+          slots.length * totalRunMs,
       ) > 1,
   };
 }
@@ -441,7 +460,7 @@ function slotOf(state, pid) {
 }
 
 function freeSlot(state) {
-  return SLOTS.find((s) => !state.onField[s]) || null;
+  return slots.find((s) => !state.onField[s]) || null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -449,7 +468,8 @@ function freeSlot(state) {
  * ------------------------------------------------------------------ */
 
 export function onFieldList(state) {
-  return SLOTS.filter((s) => state.onField[s]).map((slot) => ({
+  const slots = state.slots && state.slots.length ? state.slots : SLOTS;
+  return slots.filter((s) => state.onField[s]).map((slot) => ({
     slot,
     playerId: state.onField[slot],
     minMs: state.players[state.onField[slot]]?.playMs || 0,

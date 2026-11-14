@@ -65,6 +65,9 @@ export default {
   plan: 'Plan',
   planFor: 'Plan · {team}',
   forecast: 'Forecast',
+  format: 'Format',
+  format7: '7-a-side',
+  format5: '5-a-side',
   blockLength: 'Block length',
   block7: '7 min',
   block5: '5 min',
@@ -200,6 +203,8 @@ export default {
     MM: { code: 'MM', name: 'Mid mid' },
     RM: { code: 'RM', name: 'Right mid' },
     F: { code: 'F', name: 'Forward' },
+    LF: { code: 'LF', name: 'Left front' },
+    RF: { code: 'RF', name: 'Right front' },
   },
   benchTag: { code: 'BN', name: 'Bench' },
 };

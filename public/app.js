@@ -4,7 +4,7 @@
  */
 import {
   project, planForecast, blockLayout, benchList, onFieldList,
-  canCreditGoal, SLOTS, MIN,
+  canCreditGoal, SLOTS, FORMATS, slotsFor, MIN,
 } from './engine.js';
 import { createStore, uid } from './store.js';
 import { t, setLang, getLang, detectLang, pos as posLabel } from './i18n/index.js';
@@ -24,7 +24,7 @@ const store = createStore();
  * A cached shell is invisible otherwise, and "did my phone update?" becomes
  * unanswerable — which is exactly the question that wastes an afternoon.
  */
-const BUILD = 'mm-v14';
+const BUILD = 'mm-v15';
 
 /* ---- sync (phase 2). Completely inert without a pairing token: D13. ---- */
 
@@ -68,11 +68,18 @@ const s = {
 };
 
 function matchConfig(m) {
+  const slots = (m?.slots && m.slots.length ? m.slots : FORMATS['7'].slots);
   return {
     periodCount: m?.periodCount ?? 3,
     periodMinutes: m?.periodMinutes ?? 20,
     blockMinutes: m?.blockMinutes ?? 7,
+    slots,
   };
+}
+
+/** The slot list of the match being viewed — five or seven, whatever it is. */
+function slots() {
+  return matchConfig(s.match).slots;
 }
 
 function config() {
@@ -1023,17 +1030,17 @@ function planCell(blockIndex, slot) {
 
 /** Substitution pairs to reach `blockIndex`'s plan from the pitch as it is now. */
 function pairsFor(blockIndex, p, known) {
-  const planned = SLOTS.map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
+  const planned = slots().map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
   // A half-filled block can't be trusted as a target: it would read as
   // "everyone not listed must come off".
-  if (planned.length !== SLOTS.length) return null;
+  if (planned.length !== slots().length) return null;
   const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
 
-  const outs = SLOTS
+  const outs = slots()
     .filter((sl) => p.onField[sl] && !planned.includes(p.onField[sl]))
     .map((sl) => ({ slot: sl, id: p.onField[sl] }));
 
-  const benchIn = SLOTS
+  const benchIn = slots()
     .map((sl) => ({ slot: sl, id: planCell(blockIndex, sl) }))
     .filter((x) => x.id && known.has(x.id) && !onPitch.includes(x.id))
     .filter((x, i, arr) => arr.findIndex((y) => y.id === x.id) === i);
@@ -1052,8 +1059,8 @@ function pairsFor(blockIndex, p, known) {
 
 /** True when exactly the players planned for `blockIndex` are the ones out there. */
 function pitchIsPlan(blockIndex, p, known) {
-  const want = SLOTS.map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
-  if (want.length !== SLOTS.length) return false;
+  const want = slots().map((sl) => planCell(blockIndex, sl)).filter((id) => id && known.has(id));
+  if (want.length !== slots().length) return false;
   const on = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
   if (on.length !== want.length) return false;
   return on.every((id) => want.includes(id));
@@ -1102,7 +1109,7 @@ function nextChange(p) {
 
   // A small planned position swap with no substitution is still worth a nudge.
   const onPitch = Object.keys(p.onField).map((sl) => p.onField[sl]).filter(Boolean);
-  const moves = SLOTS
+  const moves = slots()
     .filter((sl) => {
       const want = planCell(nxt.blockIndex, sl);
       return want && known.has(want) && p.onField[sl] !== want && onPitch.includes(want);
@@ -1327,6 +1334,12 @@ function newMatchForm(onlyOption = false) {
       </div>
       <div class="field"><label>${T('teamForMatch')}</label>
         <select name="teamid">${teamsOf(openSeason()?.id).map((tm) => `<option value="${tm.id}">${esc(tm.name)}</option>`).join('')}</select></div>
+      <div class="rowline">
+      <div class="field"><label>${T('format')}</label>
+        <select name="format">
+          <option value="7" selected>${T('format7')}</option>
+          <option value="5">${T('format5')}</option>
+        </select></div>
       <div class="field"><label>${T('blockLength')}</label>
         <select name="block">
           <option value="7" selected>${T('block7')}</option>
@@ -1335,6 +1348,7 @@ function newMatchForm(onlyOption = false) {
           <option value="3">${T('block3')}</option>
           <option value="10">${T('block10')}</option>
         </select></div>
+      </div>
       <div class="rowline" style="margin-top:4px">
         ${onlyOption ? '' : `<button class="btn wide" data-act="cancelnew">${T('cancel')}</button>`}
         <button class="btn primary" data-act="creatematch">${T('createMatch')}</button>
@@ -1440,7 +1454,7 @@ function viewPlan() {
     const span = `${list[0].label.split('–')[0]}–${list[list.length - 1].label.split('–')[1]}`;
 
     const head = `<tr><th></th>${list.map((b) => `<th>${b.label}</th>`).join('')}</tr>`;
-    const rows = SLOTS.map((slot) => `<tr>
+    const rows = slots().map((slot) => `<tr>
         <td class="lbl">${P(slot)}</td>
         ${list.map((b) => {
           const pid = cellAt(b.blockIndex, slot);
@@ -1654,7 +1668,7 @@ function planSheetHtml() {
     const head = `<tr><th></th>${list.map((b) => `<th class="${isNow(b) ? 'now' : ''}">${b.label}${
       isNow(b) ? `<span class="nowl">${T('now')}</span>` : ''}</th>`).join('')}</tr>`;
 
-    const rows = SLOTS.map((slot) => `<tr>
+    const rows = slots().map((slot) => `<tr>
         <td class="lbl">${P(slot)}</td>
         ${list.map((b) => {
           const pid = planCell(b.blockIndex, slot);
@@ -1843,7 +1857,7 @@ function renderSheet() {
   }
 
   if (sh.kind === 'position') {
-    const items = SLOTS.map((sl) => {
+    const items = slots().map((sl) => {
       const occupant = p.onField[sl];
       return { slot: sl, id: sh.playerId === occupant ? sh.playerId : occupant, right: '',
         cur: sl === slotOfPlayer(p, sh.playerId) };
@@ -2024,6 +2038,7 @@ function createMatch(form) {
     periodCount: Math.max(1, Math.min(6, Number(f.get('periods')) || 3)),
     periodMinutes: Math.max(5, Math.min(45, Number(f.get('minutes')) || 20)),
     blockMinutes: Number(f.get('block')) || 7,
+    slots: (FORMATS[String(f.get('format') || '7')] || FORMATS['7']).slots,
     teamId: String(f.get('teamid') || teamsOf(openSeason()?.id)[0]?.id || ''),
     seasonId: openSeason()?.id || s.seasonId,
     status: 'setup',
@@ -2249,7 +2264,7 @@ function autoPlan() {
   let idx = 0;
   for (const b of blocks) {
     cells.push({ blockIndex: b.blockIndex, slot: 'G', playerId: keeper.id });
-    for (const slot of ['LB', 'RB', 'LM', 'MM', 'RM', 'F']) {
+    for (const slot of slots().filter((sl) => sl !== 'G')) {
       cells.push({ blockIndex: b.blockIndex, slot, playerId: outfield[idx % outfield.length].id });
       idx++;
     }
@@ -2261,7 +2276,7 @@ function autoPlan() {
 
 function startMatch() {
   if (!s.match) return;
-  if (squad().length < SLOTS.length) {
+  if (squad().length < slots().length) {
     showToast(`⚠ ${T('squadOf', { n: squad().length, total: roster().length })}`, null);
     return;
   }
@@ -2271,7 +2286,7 @@ function startMatch() {
   for (const cell of s.plan.filter((x) => x.blockIndex === first.blockIndex)) {
     assignments[cell.slot] = cell.playerId;
   }
-  if (Object.keys(assignments).length !== SLOTS.length) {
+  if (Object.keys(assignments).length !== slots().length) {
     s.sheet = { kind: 'cell', blockIndex: 0, slot: 'G' };
     showToast('⚠ ' + T('emptySlot', { block: 1, slot: P('G') }), null);
     return;

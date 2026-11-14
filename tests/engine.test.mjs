@@ -6,7 +6,7 @@ import {
   SLOTS,
   blockLayout,
   planForecast,
-  project,
+  FORMATS, project,
   canCreditGoal,
   benchList,
   onFieldList,
@@ -458,4 +458,33 @@ test('a 3-minute block still distributes the whole match', () => {
   const layout = blockLayout(cfg);
   const total = layout.reduce((a, b) => a + b.lengthMs, 0);
   assert.equal(total, 3 * 12 * MIN, 'every planned minute is accounted for');
+});
+
+test('a five-a-side match plans five slots, not seven', () => {
+  const cfg = { periodCount: 3, periodMinutes: 12, blockMinutes: 3, slots: FORMATS['5'].slots };
+  const layout = blockLayout(cfg);
+  const ids = ['a', 'b', 'c', 'd', 'e'];
+  const cells = [];
+  for (const b of layout) {
+    cfg.slots.forEach((sl, i) => cells.push({ blockIndex: b.blockIndex, slot: sl, playerId: ids[i] }));
+  }
+  const f = planForecast(cells, cfg, ids.map((id) => ({ id })));
+  assert.equal(f.errors.length, 0, JSON.stringify(f.errors));
+  assert.equal(f.expectedMs, 5 * 3 * 12 * MIN, 'five players on the pitch, three periods of twelve');
+  assert.equal(f.totalMs, f.expectedMs, 'every planned minute is played by somebody');
+  assert.deepEqual(cfg.slots, ['G', 'LB', 'RB', 'LF', 'RF']);
+});
+
+test('a five-a-side projection keeps the same invariant, with five slots', () => {
+  const cfg = { periodCount: 1, periodMinutes: 10, blockMinutes: 5, slots: FORMATS['5'].slots };
+  const assignments = { G: 'a', LB: 'b', RB: 'c', LF: 'd', RF: 'e' };
+  const events = [
+    { id: 'e1', type: 'lineup', atMs: 1000, payload: { assignments } },
+    { id: 'e2', type: 'period_start', atMs: 2000, payload: { period: 1 } },
+  ];
+  const p = project(events, cfg, 2000 + 5 * MIN);
+  assert.equal(onFieldList(p).length, 5, 'five on the field');
+  const total = Object.values(p.players).reduce((a, x) => a + x.playMs, 0);
+  assert.equal(total, 5 * p.totalRunningMs, 'minutes balance against five slots');
+  assert.equal(p.slots.length, 5, 'the projected state remembers its format');
 });
