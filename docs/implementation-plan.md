@@ -103,3 +103,10 @@ Tests: `tests/engine.test.mjs` — 18 passing.
 - `public/app.js`: join screen, adoption on pairing, hydrate on boot, lease
   claim and takeover, read-only viewer, local-only banner.
 - Poll pauses when hidden; `online` and foreground force a flush and a pull.
+
+## Verification hygiene — standing rule
+
+Every change that is checked against the live club must clean up after itself in
+the same turn: delete test devices by id, revoke unspent invites, and re-run the
+baseline queries to prove the club is back to what it was. Procedure and
+commands: [testing.md](testing.md).

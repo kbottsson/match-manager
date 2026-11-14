@@ -82,3 +82,9 @@ Player names in the screenshots and demo seed are placeholders.
 
 Phase 1 (single coach, offline). Phase 2 adds Cloudflare sync so other coaches
 can watch read-only. Design: `docs/design-spec.md`.
+
+## Testing
+
+`npm test` and `tests/*.e2e.mjs` run against a local Worker with a throwaway
+database. Anything verified against the live club must leave no state behind —
+see [docs/testing.md](docs/testing.md).
