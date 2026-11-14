@@ -58,8 +58,13 @@ export function createStore(storage = globalThis.localStorage) {
     saveLang: (lang) => write(K.lang, lang),
 
     /* ---- matches ---- */
-    listMatches,
-    loadMatch: (id) => listMatches().find((m) => m.id === id) || null,
+    /** Everything the user should see: a deleted match is a tombstone, not a row. */
+    listMatches: () => asArray(read(K.matches, [])).filter((m) => !m.deletedAt),
+    /** Including tombstones — for syncing, which must carry the deletion up. */
+    allMatches: () => asArray(read(K.matches, [])),
+    loadMatch(id) {
+      return asArray(read(K.matches, [])).find((m) => m.id === id) || null;
+    },
     saveMatch(match) {
       const all = listMatches();
       const i = all.findIndex((m) => m.id === match.id);
@@ -140,10 +145,19 @@ export function createStore(storage = globalThis.localStorage) {
       });
     },
 
-    /** Hard-deletes a match and its plan/events. Used only by an explicit confirm. */
-    deleteMatch(id) {
-      const all = listMatches().filter((m) => m.id !== id);
-      try { storage.removeItem(K.events(id)); storage.removeItem(K.plan(id)); } catch { /* ignore */ }
+    /**
+     * Deletes a match by marking it, not by dropping the row.
+     *
+     * The club holds a copy of every match. Removing the row locally only made
+     * the next sync put it back — a deletion that silently undoes itself. A
+     * tombstone travels with the record, so every device agrees, and the history
+     * of what was deleted survives.
+     */
+    deleteMatch(id, at = new Date().toISOString()) {
+      const all = asArray(read(K.matches, []));
+      const i = all.findIndex((m) => m.id === id);
+      if (i === -1) return false;
+      all[i] = { ...all[i], deletedAt: at };
       return write(K.matches, all);
     },
 

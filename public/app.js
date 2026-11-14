@@ -147,7 +147,14 @@ function applyRemote(got) {
   for (const doc of got.docs || []) {
     if (doc.kind === 'match') {
       store.saveMatch(doc.body);
-      if (s.match?.id === doc.id) s.match = doc.body;
+      if (s.match?.id === doc.id) {
+        if (doc.body.deletedAt) {
+          // Someone else deleted the match we are looking at.
+          s.match = null; s.events = []; s.plan = []; s.route = null; s.sheet = null;
+        } else {
+          s.match = doc.body;
+        }
+      }
       changed = true;
     } else if (doc.kind === 'plan') {
       const cells = Array.isArray(doc.body) ? doc.body : (doc.body?.cells || []);
@@ -320,7 +327,7 @@ async function adoptLocalIntoClub() {
   const localModel = s.clubs.length > 0 || s.people.length > 0;
   if (localModel && !has('model', '')) outbox.addDoc('model', '', modelBody(), '*');
 
-  for (const m of store.listMatches()) {
+  for (const m of store.allMatches()) {
     if (has('match', m.id)) continue;                 // the club already knows it
     outbox.addDoc('match', m.id, matchBody(m), '*');
     const cells = store.loadPlan(m.id);
@@ -2481,8 +2488,20 @@ function handle(ev) {
     case 'delplayer': purgePlayer(a); render(); return;
     case 'deletematch': {
       if (!confirm(T('confirmDelete'))) return;
-      store.deleteMatch(s.match.id);
-      s.match = null; s.events = []; s.plan = []; s.route = null; render(); return;
+      if (s.match?.status === 'live') {
+        // Deleting the match you are recording would strand the clock, the
+        // lease and everyone watching. End it first.
+        showToast(`⚠ ${T('endBeforeDelete')}`, null);
+        return;
+      }
+      const id = s.match.id;
+      const body = matchBody(s.match);
+      store.deleteMatch(id);
+      // The club has to be told, or the next pull brings it back.
+      pushDoc('match', id, { ...body, deletedAt: new Date().toISOString() });
+      s.match = null; s.events = []; s.plan = []; s.route = null; s.sheet = null;
+      showToast(`✓ ${T('matchDeleted')}`, null);
+      render(); return;
     }
 
     case 'autoplan': autoPlan(); return;

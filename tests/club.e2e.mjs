@@ -231,6 +231,25 @@ try {
       'the plan screen draws', 15000);
     ok('the shared plan renders on the other phone',
       (await B.js("document.querySelectorAll('.ptable td').length")) > 0);
+
+    /* ---- deleting a planned match must survive the next sync ---- */
+    await B.click('[data-act="deletematch"]');
+    await B.waitFor(() => B.js("!document.querySelector('[data-act^=\"openmatch:\\'m-late\\'\"]')"),
+      'the match is gone from the list', 15000);
+    ok('a planned match can be deleted', true);
+
+    // This is the regression: a pull used to bring it straight back.
+    await B.js('__mm.sync.now()');
+    await sleep(1200);
+    await B.js('__mm.sync.now()');
+    await sleep(1200);
+    const stillGone = await B.js(
+      "!JSON.parse(localStorage.getItem('mm.v1.matches')||'[]').filter(m => !m.deletedAt).some(m => m.id === 'm-late')");
+    ok('…and a sync does not resurrect it', stillGone);
+
+    const doc = await api('GET', '/api/docs/match/m-late', { token: owner });
+    ok('the deletion reaches the club as a tombstone', !!doc.body?.body?.deletedAt,
+      JSON.stringify(doc.body?.body || {}).slice(0, 120));
   }
 
   /* ---- the admin sees them arrive ---- */

@@ -164,7 +164,7 @@ export default {
   teamName: 'Lagnamn', done: 'Klar', deleteMatch: 'Ta bort match',
   noMatch: 'Ingen match än', inProgress: 'Pågår',
   positionPrefs: 'Föredragna positioner', optional: 'valfritt',
-  deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?',
+  deletePlayer: 'Ta bort', confirmDelete: 'Ta bort matchen och dess logg?', matchDeleted: 'Matchen borttagen', endBeforeDelete: 'Avsluta matchen innan du tar bort den',
   benchShort: 'BÄNK', autoFill: 'Fyll automatiskt',
   home: 'Hem', resume: 'Fortsätt',
   upcoming: 'Kommande', planAnother: 'Planera ännu en match', notStarted: 'Ej startad',

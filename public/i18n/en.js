@@ -174,7 +174,7 @@ export default {
   teamName: 'Team name', done: 'Done', deleteMatch: 'Delete match',
   noMatch: 'No match yet', inProgress: 'In progress',
   positionPrefs: 'Preferred positions', optional: 'optional',
-  deletePlayer: 'Remove', confirmDelete: 'Delete this match and its log?',
+  deletePlayer: 'Remove', confirmDelete: 'Delete this match and its log?', matchDeleted: 'Match deleted', endBeforeDelete: 'End the match before deleting it',
   benchShort: 'BENCH', autoFill: 'Auto-fill',
   home: 'Home', resume: 'Resume',
   upcoming: 'Upcoming', planAnother: 'Plan another match', notStarted: 'Not started',
