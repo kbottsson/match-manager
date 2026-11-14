@@ -198,7 +198,13 @@ export function createApi({
  *
  * Documents coalesce by (docKind, id): only the newest body matters, because a
  * plan is a document, not a log. Events never coalesce — each one is history.
+ * A queued tombstone is the exception: it is never replaced by a live body, so
+ * a write racing a deletion cannot smuggle the match back to the club.
  */
+
+/** A deleted match is a tombstone document, exactly like the club stores it. */
+export const isTombstone = (body) =>
+  !!body && typeof body === 'object' && !Array.isArray(body) && !!body.deletedAt;
 export function createOutbox(storage = globalThis.localStorage, key = KEYS.outbox) {
   const load = () => {
     const raw = readJson(storage, key, []);
@@ -227,12 +233,23 @@ export function createOutbox(storage = globalThis.localStorage, key = KEYS.outbo
       const k = id || '';
       const existing = items.find((i) => i.kind === 'doc' && i.docKind === docKind && (i.id || '') === k);
       if (existing) {
+        // A deletion on its way to the club outranks anything queued behind it:
+        // replacing the tombstone with a live body leaves the match alive in the
+        // club, and the next pull puts it back on the list for good.
+        if (isTombstone(existing.body) && !isTombstone(body)) return false;
         existing.body = body;
         if (rev != null) existing.rev = rev;
       } else {
         items.push({ kind: 'doc', docKind, id: k, body, rev });
       }
       save(items);
+      return true;
+    },
+
+    /** Is a write for this document still waiting to be sent? */
+    hasDoc(docKind, id) {
+      const k = id || '';
+      return load().some((i) => i.kind === 'doc' && i.docKind === docKind && (i.id || '') === k);
     },
 
     /** Drops one item after it has been accepted. */

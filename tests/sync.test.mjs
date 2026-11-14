@@ -5,6 +5,7 @@ import {
   KEYS, LEASE_STALE_MS, POLL_MS, POLL_IDLE_MS, BACKOFF_MS,
   loadPairing, savePairing, clearPairing,
   createApi, createOutbox, createController, nextPollDelay, leaseState, SyncError,
+  isTombstone,
 } from '../public/sync.js';
 
 /* ------------------------------------------------------------------ *
@@ -156,6 +157,34 @@ test('outbox: survives a reload, because it is only ever in storage', () => {
   const st = mem();
   createOutbox(st).addEvents('m1', [{ id: 'e1', type: 'sub' }]);
   assert.equal(createOutbox(st).size(), 1);
+});
+
+test('outbox: a queued deletion is not replaced by a later write', () => {
+  const st = mem();
+  const ob = createOutbox(st);
+  ob.addDoc('match', 'm1', { id: 'm1', opponent: 'Torns', deletedAt: '2026-11-14T15:00:00.000Z' });
+  ob.addDoc('match', 'm1', { id: 'm1', opponent: 'Torns' });   // a save racing the delete
+  assert.equal(isTombstone(ob.load()[0].body), true,
+    'the club must still be told the match is gone');
+  // ...and the other way round: a delete always wins the coalescing.
+  ob.addDoc('match', 'm1', { id: 'm1', opponent: 'Torns', deletedAt: '2026-11-14T15:01:00.000Z' });
+  assert.equal(ob.load()[0].body.deletedAt, '2026-11-14T15:01:00.000Z');
+});
+
+test('outbox: hasDoc answers whether a document is still waiting', () => {
+  const st = mem();
+  const ob = createOutbox(st);
+  assert.equal(ob.hasDoc('match', 'm1'), false);
+  ob.addDoc('match', 'm1', { id: 'm1', deletedAt: 'x' });
+  assert.equal(ob.hasDoc('match', 'm1'), true);
+  assert.equal(ob.hasDoc('match', 'm2'), false);
+});
+
+test('tombstone: only a non-array body carrying deletedAt counts', () => {
+  assert.equal(isTombstone({ id: 'm1', deletedAt: 'x' }), true);
+  assert.equal(isTombstone({ id: 'm1' }), false);
+  assert.equal(isTombstone([{ slot: 1 }]), false, 'a plan is an array, never a tombstone');
+  assert.equal(isTombstone(null), false);
 });
 
 test('outbox: partial batch keeps only what did not land', async () => {

@@ -10,7 +10,7 @@ import { createStore, uid } from './store.js';
 import { t, setLang, getLang, detectLang, pos as posLabel } from './i18n/index.js';
 import {
   loadPairing, savePairing, clearPairing, createApi, createOutbox,
-  createController, leaseState,
+  createController, leaseState, isTombstone,
 } from './sync.js';
 
 /* ------------------------------------------------------------------ *
@@ -24,7 +24,7 @@ const store = createStore();
  * A cached shell is invisible otherwise, and "did my phone update?" becomes
  * unanswerable — which is exactly the question that wastes an afternoon.
  */
-const BUILD = 'mm-v13';
+const BUILD = 'mm-v14';
 
 /* ---- sync (phase 2). Completely inert without a pairing token: D13. ---- */
 
@@ -153,6 +153,19 @@ function applyRemote(got) {
 
   for (const doc of got.docs || []) {
     if (doc.kind === 'match') {
+      // A deletion this device made is not up for negotiation. The club's copy
+      // can arrive late (the pull was already in flight when the coach tapped
+      // Delete), and a stale one can arrive after the tombstone landed if
+      // another screen wrote the match. Adopting either one is what made a
+      // deleted match "come back": the local tombstone was overwritten, the
+      // list rendered it again, and no further pull corrected it.
+      if (!doc.body.deletedAt && isTombstone(store.loadMatch(doc.id))) {
+        if (!outbox.hasDoc('match', doc.id)) {
+          outbox.addDoc('match', doc.id, store.loadMatch(doc.id), null);
+          flushSoon(0);
+        }
+        continue;
+      }
       store.saveMatch(doc.body);
       if (s.match?.id === doc.id) {
         if (doc.body.deletedAt) {
@@ -2505,8 +2518,11 @@ function handle(ev) {
       const id = s.match.id;
       const body = matchBody(s.match);
       store.deleteMatch(id);
-      // The club has to be told, or the next pull brings it back.
+      // The club has to be told, or the next pull brings it back. Not in half a
+      // second, either: the poll runs every 30 s and a tombstone stuck behind a
+      // debounce is a window in which the club still claims the match.
       pushDoc('match', id, { ...body, deletedAt: new Date().toISOString() });
+      flushSoon(0);
       s.match = null; s.events = []; s.plan = []; s.route = null; s.sheet = null;
       showToast(`✓ ${T('matchDeleted')}`, null);
       render(); return;

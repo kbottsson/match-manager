@@ -250,6 +250,23 @@ try {
     const doc = await api('GET', '/api/docs/match/m-late', { token: owner });
     ok('the deletion reaches the club as a tombstone', !!doc.body?.body?.deletedAt,
       JSON.stringify(doc.body?.body || {}).slice(0, 120));
+
+    // Now the nastier half: a stale device that still believes in the match
+    // writes it back, so the club holds a live copy again. The phone that
+    // deleted it must not adopt that copy — adopting it is what made a deleted
+    // match reappear — and must put the tombstone back.
+    await api('PUT', '/api/docs/match/m-late', {
+      token: owner,
+      body: { body: { id: 'm-late', opponent: 'Late Arrival FC', status: 'setup', teamId: 't1', seasonId: 's1' } },
+    });
+    await B.js('__mm.sync.now()');
+    await sleep(1500);
+    const revived = await B.js(
+      "JSON.parse(localStorage.getItem('mm.v1.matches')||'[]').filter(m => m.id === 'm-late' && !m.deletedAt).length");
+    ok('…nor does a stale live copy on the club revive it', revived === 0, 'live copies on the phone: ' + revived);
+    const again = await api('GET', '/api/docs/match/m-late', { token: owner });
+    ok('…and the phone tells the club again', !!again.body?.body?.deletedAt,
+      JSON.stringify(again.body?.body || {}).slice(0, 120));
   }
 
   /* ---- the admin sees them arrive ---- */
