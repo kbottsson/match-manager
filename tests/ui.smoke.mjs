@@ -459,6 +459,35 @@ async function main() {
   ok('…and the rest on the bench',
     (await evaluate("document.querySelectorAll('.view .list .row').length")) > 5);
 
+  /* ---- a remote update must not eat a half-typed form ---- */
+  console.log('typing through a poll');
+  await click('[data-act="home"]');
+  await sleep(250);
+  await click('[data-act="tab:match"]');
+  await sleep(250);
+  await click('[data-act="newmatch"]');
+  await sleep(350);
+
+  await evaluate(`(() => {
+    const f = document.querySelector('#matchform');
+    f.querySelector('[name=opponent]').value = 'Half typed';
+    f.querySelector('[name=opponent]').focus();
+    f.querySelector('[name=opponent]').dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  })()`);
+  await evaluate('__mm.renderRemote()');
+  await sleep(200);
+  ok('a remote update leaves the typed opponent alone',
+    (await evaluate("document.querySelector('#matchform [name=opponent]').value")) === 'Half typed');
+  ok('…and the form is still there',
+    (await evaluate("!!document.querySelector('#matchform')")) === true);
+
+  await evaluate('__mm.render()');
+  await sleep(200);
+  ok('a local render still happens on demand',
+    (await evaluate("!!document.querySelector('#matchform')")) === false
+    || (await evaluate("document.querySelector('#matchform [name=opponent]').value")) === '');
+
   ws.close();
 }
 

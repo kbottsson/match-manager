@@ -24,7 +24,7 @@ const store = createStore();
  * A cached shell is invisible otherwise, and "did my phone update?" becomes
  * unanswerable — which is exactly the question that wastes an afternoon.
  */
-const BUILD = 'mm-v15';
+const BUILD = 'mm-v16';
 
 /* ---- sync (phase 2). Completely inert without a pairing token: D13. ---- */
 
@@ -217,13 +217,18 @@ function applyRemote(got) {
   }
 
   if (Array.isArray(got.lease)) {
-    remote.lease = s.match ? (got.lease.find((l) => l.matchId === s.match.id) || null) : null;
-    changed = true;
+    // A lease is returned on every poll, heartbeat included. Treating that as a
+    // change meant a re-render every 30 seconds forever — the thing that ate a
+    // half-typed team name. Only the identity and a coarse timestamp matter.
+    const next = s.match ? (got.lease.find((l) => l.matchId === s.match.id) || null) : null;
+    const sig = (l) => (l ? `${l.holder}|${l.name}|${Math.floor(Number(l.seenAt || 0) / 30000)}` : 'none');
+    if (sig(next) !== sig(remote.lease)) changed = true;
+    remote.lease = next;
   }
   remote.at = Date.now();
 
   // Never re-render underneath an open sheet: it would eat the tap in flight.
-  if (changed && !s.sheet) render();
+  if (changed && !s.sheet) render({ remote: true });
 }
 
 /** The live match's lease, read against this device. */
@@ -271,7 +276,7 @@ async function maybeClaim(force = false) {
     const got = await sync.claim(force ? 'takeover' : 'heartbeat');
     if (sync.state().lease) remote.lease = sync.state().lease;
     if (got) sync.startHeartbeat();
-    if (!got) render();
+    if (!got) render({ remote: true });
     return got;
   } catch {
     return null; // offline, or the match is not on the server yet — retried on the next render
@@ -993,13 +998,31 @@ function routeNow() {
  * render
  * ------------------------------------------------------------------ */
 
-function render() {
+/**
+ * True while the user is filling in a form. The inputs are uncontrolled, so a
+ * full re-render throws away whatever has been typed — which is exactly what
+ * the idle poll used to do every thirty seconds, mid-way through a new match.
+ */
+function editingForm() {
+  if (s.typingForm) return true;
+  const el = document.activeElement;
+  return !!(el && el.tagName && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)
+    && el.closest && el.closest('form'));
+}
+
+function render({ remote = false } = {}) {
+  // A remote update can wait: the state is already applied, only the DOM is
+  // stale, and the next paint will show it. Typed text cannot wait.
+  if (remote && editingForm()) { s.remotePending = true; return; }
+
   const app = document.getElementById('app');
   // NOTE: do not write the derived route back into s.route. s.route is the
   // user's *requested* route (home / plan / live); overwriting it with the
   // resolved one made "home" last exactly one render, so the next tap bounced
   // straight back into the live match.
   const route = routeNow();
+  s.typingForm = false;
+  s.remotePending = false;
 
   if (route === 'join') app.innerHTML = viewJoin();
   else if (route === 'club') app.innerHTML = viewClub();
@@ -2671,6 +2694,11 @@ document.addEventListener('click', (ev) => {
 // Buttons inside forms must not submit them; we read the form on demand.
 document.addEventListener('submit', (e) => e.preventDefault());
 
+// Typing anywhere in a form protects it from being rebuilt under the user.
+document.addEventListener('input', (e) => {
+  if (e.target?.closest?.('form')) s.typingForm = true;
+}, true);
+
 /* ------------------------------------------------------------------ *
  * Demo seed — only runs with ?seed=1, so the app can be shown (and
  * screenshotted) with a realistic match without touching real data.
@@ -2757,6 +2785,7 @@ if (new URLSearchParams(location.search).get('plan') === '1' && s.match) {
 // rather than scrape the DOM. Holds nothing the page does not already hold.
 globalThis.__mm = {
   state: s, remote, sync, pairing: () => pairing, outbox, render,
+  renderRemote: () => render({ remote: true }),
 };
 
 render();
